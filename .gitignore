@@ -1,0 +1,11 @@
+node_modules/
+dist/
+target/
+.venv/
+__pycache__/
+.pytest_cache/
+*.pyc
+.env
+*.log
+data/osrm/*
+!data/osrm/.gitkeep
