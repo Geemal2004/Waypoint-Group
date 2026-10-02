@@ -1,0 +1,19 @@
+# Executable API walkthrough
+
+This verifies the implemented backend milestone; it does not replace the required judge web interfaces.
+
+Run `node tools/online-walkthrough.mjs` (Node 22) after Compose is healthy. Optional `WAYPOINT_URL` changes the same-origin base URL. The script adds synthetic orders and selects an unused fixture day; it does not reset/delete existing data. A fixture calendar must contain a future eligible day.
+
+1. Each client GETs `/api/v1/auth/csrf`, retaining JSESSIONID, then POSTs form username/password to `/auth/login` with the returned CSRF header. Fetch a new token after login. `/auth/me` reports authenticated account/role.
+2. Manager GETs `/catalog`, then POSTs `/orders` with permitted outlet, day and product quantities. Ambient/chilled/frozen must be separate. The accepted date/explanation is persisted.
+3. Dispatcher GETs `/vehicles` and `/orders`, then POSTs `/orders/{id}/publish` with expectedVersion, vehicle, loader, trip, UTC departure/return, declared fixture fuel and reason. The server rechecks constraints under vehicle/order locks.
+4. Loader POSTs `/loading` with all line IDs/loaded quantities and SHORTAGE/DAMAGE/NONE. A shortage creates an actionable dispatcher record. POST `/release` is blocked until dispatcher POSTs `/approve-partial` with the latest version/reason; a full load needs no partial approval.
+5. Driver POSTs `/start` (release and plan acknowledgement), then `/arrive` while safely stopped. Multipart `/deliver` accepts JSON `delivery`, PNG/JPEG `proof` and capturedAt. `/sync-delivery` accepts an immutable JSON `action` with UUID, deviceId, capturedAt and delivery payload; it persists idempotency and business outcome together.
+6. Manager sees DELIVERED and expected_receiving, then POSTs `/receive` with actual quantities/issue. Known loading shortage is already reflected. Dispatcher sees the accepted receipt and audit timeline.
+7. Offline API scenario: capture proof for an ARRIVED order; dispatcher defers that SAME order before sync. `/sync-delivery` preserves evidence in conflict review. Dispatcher GETs `/sync-conflicts`, inspects scoped evidence and POSTs `/sync-conflicts/{id}/resolve` with expectedVersion, decision and reason. Accepted recovery retains the deferral, creates proof/receipt task and lets manager finish receiving.
+
+Order handoffs and conflict resolutions carry current expectedVersion; order creation and authentication do not. Response versions must be used for the next step. Duplicate action IDs return the original JSON result; modified payload/evidence reuse fails. Original conflict results remain immutable even after resolution, whose state is queried separately. Invalid requests/types can return HTTP validation errors; transient infrastructure failures are retried by the account-scoped browser outbox. GET /sync-actions returns only the authenticated account's action and conflict-resolution states for recovery polling.
+
+Proof: JPEG/PNG up to 5 MiB and 20 megapixels, actual media type validated. Filenames do not determine storage paths. Evidence requires permitted account scope and is returned with no-store/nosniff headers.
+
+Seeded manager scope is exactly DEMO-FRESH, DEMO-STYLE and DEMO-TECH at Peliyagoda. DEMO-OUTSIDE is deliberately denied. Source-driver identities have no usable login and are disabled. Source-network publication requires the missing road/setpoint contracts and is rejected rather than presented as feasible.

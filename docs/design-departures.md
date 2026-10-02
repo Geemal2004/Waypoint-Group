@@ -1,7 +1,19 @@
 # Design fidelity and departures
 
-- Required adaptation: loader screens gain a phone layout alongside the submitted tablet layout.
-- Initial landing screen reports implementation status only. Full four-role design fidelity is pending.
-- Driver navigation will deep-link to a mapping app; in-app actions are for safely stopped use.
-- Brand colours remain identity cues, independent of semantic status colours.
-- Add every significant departure here with reason and effect before submission.
+The connected Figma file gWapWGfw3V1dhKLlMKSwxG was read successfully after correcting the account identifier. Inspected references include system tokens 2116:28, dispatcher 2091:23 and 2292:45, loader 2104:5 and phone adaptation 2212:13, driver handoff 2289:25, proof 2107:11, true conflict/recovery 2107:49/79, Fresh ordering/receipt 2109:8/130 and 2233:81, Style booking/risk/deferral 2110:18/62/108, and Tech ordering/damage/issues 2111:26/102/148. Nearby rationales identify physical counting, retained shortages, true same-stop conflicts and distinct receipt confirmation.
+
+Implemented: DM Sans, 8 px panel corners, supplied neutral operations palette, independent semantic statuses, Fresh/Style/Tech identity, day/night tokens, local Figma avatars/product/search/package assets, quantitative capacity and product controls, large phone actions. Static assets are downloaded; design screenshots are not rendered as screens.
+
+Significant departures for this first milestone:
+
+- Authentication is an added scoped login form; prototype role-selection presentation is not an authorization mechanism.
+- Dispatcher consolidates planning/decisions into one functional workspace. Navigation entries for unimplemented forecasts/maps are omitted. There is no pixel-perfect equivalence to every submitted screen.
+- Loader adapts tablet panels to a 390 px phone. One-stop fixture plans have no reverse-stop sequence; multi-stop routing is pending.
+- Prototype product names, amounts, stock suggestions and times are replaced by persisted synthetic products and actual quantities. Currency totals and road ETAs are omitted because their source contracts are unavailable.
+- Scheduling shows declared synthetic reservations and known outlet windows, not a claimed feasible road route. Mall-window risk/alternative comparisons remain pending.
+- Driver photo uses native camera/file capture and survives local reload. Receiver signature capture, external navigation and live GPS are pending. Actions require safely stopped use.
+- Manager Fresh/Style/Tech use a shared branded order/receipt implementation. Tech receipt issues persist, but receipt-specific damage photos and the full accepted-issue recovery view are pending.
+- Offline server decisions are labelled cached. Same-stop conflicts retain evidence and the server deferral, with dispatcher review and account-scoped recovery polling.
+- Operational queue lists and persisted audit replace static prototype illustrative counts. No trained forecasts or fabricated solver outputs are displayed.
+
+Phone overflow and day/night behavior are covered by the browser walkthrough. Final visual acceptance against all desktop/tablet/night and degradation references remains a human review gate.
