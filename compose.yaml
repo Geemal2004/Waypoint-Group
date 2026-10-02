@@ -31,12 +31,16 @@ services:
       retries: 20
   core:
     build: ./services/core
+    volumes:
+      - ./data/private:/seed:ro
     environment:
       DB_URL: jdbc:postgresql://db:5432/${POSTGRES_DB:-waypoint}
       DB_USER: ${POSTGRES_USER:-waypoint}
       DB_PASSWORD: ${POSTGRES_PASSWORD:-waypoint_local_only}
       REDIS_HOST: redis
       PLANNING_URL: http://planning:8000
+      DEMO_SEED: ${DEMO_SEED:-true}
+      SESSION_SECURE: ${SESSION_SECURE:-false}
     ports:
       - '127.0.0.1:${CORE_PORT:-8081}:8081'
     depends_on:
@@ -46,12 +50,23 @@ services:
         condition: service_healthy
       planning:
         condition: service_healthy
+    healthcheck:
+      test: [CMD, wget, -q, --spider, http://127.0.0.1:8081/actuator/health/readiness]
+      interval: 10s
+      timeout: 5s
+      retries: 30
   web:
     build: ./apps/web
     ports:
-      - '${WEB_PORT:-8080}:80'
+      - '127.0.0.1:${WEB_PORT:-8080}:80'
     depends_on:
-      - core
+      core:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, wget, -q, --spider, http://127.0.0.1/]
+      interval: 10s
+      timeout: 3s
+      retries: 10
   osrm:
     image: ghcr.io/project-osrm/osrm-backend:v5.27.1
     profiles: [routing]

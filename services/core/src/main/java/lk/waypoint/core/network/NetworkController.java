@@ -15,7 +15,7 @@ public class NetworkController {
     public NetworkSummary network() {
         var brands = jdbc.query("select code, name, outlet_count from brands order by code",
             (row, index) -> new Brand(row.getString("code"), row.getString("name"), row.getInt("outlet_count")));
-        return new NetworkSummary("Waypoint Group", "foundation", brands,
+        return new NetworkSummary("Waypoint Group", "online-api", brands,
             jdbc.queryForObject("select count(*) from depots", Integer.class));
     }
 

@@ -1,6 +1,9 @@
 node_modules/
 dist/
 target/
+.m2/
+tmp/
+data/private/
 .venv/
 __pycache__/
 .pytest_cache/
