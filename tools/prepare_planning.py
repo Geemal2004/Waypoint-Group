@@ -41,7 +41,7 @@ for key,(lon,lat) in points.items():
     assert data['code'] == 'Ok', f'No road waypoint for {key}'
     snapped = data['waypoints'][0]['location']
     provenance = 'SUPPLEMENTAL JUDGE: district-town road waypoint snapped by local OSRM; not source outlet/depot geolocation'
-    sql.append(f'INSERT INTO routing_points VALUES({q(key)},{snapped[0]},{snapped[1]},{q(provenance)},true) ON CONFLICT DO NOTHING;')
+    sql.append(f'INSERT INTO routing_points(point_id,longitude,latitude,provenance,supplemental) VALUES({q(key)},{snapped[0]},{snapped[1]},{q(provenance)},true) ON CONFLICT DO NOTHING;')
 for r in fleet:
     sql.append(f"INSERT INTO scenario_fleet VALUES('S1',{q(r['vehicle_id'])},{q(r['status'])}) ON CONFLICT DO NOTHING;")
     sql.append(f"UPDATE vehicles SET driver_id='DEMO-DRIVER',min_c=CASE WHEN refrigerated THEN 2 ELSE NULL END,max_c=CASE WHEN refrigerated THEN 5 ELSE NULL END,cold_capability_source='SUPPLEMENTAL JUDGE: 2–5C declared capability; shared demo driver for role walkthrough' WHERE id={q(r['vehicle_id'])} AND depot_code='PELIYAGODA';")
@@ -54,7 +54,7 @@ for r in orders:
     ref=r['order_ref']; product='JUDGE-'+ref; cold=r['temp_requirement']!='ambient'; units=int(r['order_units'])
     weight=Decimal(r['order_weight_kg'])/units; volume=Decimal(r['order_volume_m3'])/units
     values=[q(product),q(f"{r['brand']} {r['temp_requirement']} source units · {ref}"),q(r['brand'].upper()),q('source unit'),str(weight),str(volume),q(r['temp_requirement'].upper()),'2' if cold else 'NULL','5' if cold else 'NULL',q('Supplemental judge 2–5C cold requirement' if cold else 'Keep dry'),'false']
-    sql.append('INSERT INTO products VALUES('+','.join(values)+') ON CONFLICT DO NOTHING;')
+    sql.append('INSERT INTO products(id,name,brand_code,unit,weight_kg,volume_m3,temperature,min_c,max_c,handling,demo) VALUES('+','.join(values)+') ON CONFLICT DO NOTHING;')
     values=[q(identity(ref)),q(r['outlet_id']),q('DEMO-MANAGER'),q('2026-01-08'),q(r['temp_requirement'].upper()),q('RECEIVED'),'false',q('Source Task 2B S1; assigned historical judge timeline; supplemental road waypoints and cold ranges'),q(ref),q('S1'),r['order_weight_kg'],r['order_volume_m3'],r['days_since_last_served'],'true' if r['deferred_yesterday']=='1' else 'false']
     sql.append('INSERT INTO orders(id,outlet_id,created_by,day,temperature,status,demo,schedule_reason,source_ref,scenario,source_weight_kg,source_volume_m3,days_since_last_served,deferred_yesterday) VALUES('+','.join(values)+') ON CONFLICT DO NOTHING;')
     sql.append(f"INSERT INTO order_lines(id,order_id,product_id,ordered) VALUES({q(identity(ref+':line'))},{q(identity(ref))},{q(product)},{units}) ON CONFLICT DO NOTHING;")

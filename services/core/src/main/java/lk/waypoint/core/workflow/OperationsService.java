@@ -21,7 +21,7 @@ public class OperationsService {
     public Map<String,Object> catalog(Account account) {
         var outlets=jdbc.queryForList("select o.* from outlets o where o.depot_code=? and (? <> 'MANAGER' or exists(select 1 from account_outlets s where s.outlet_id=o.id and s.account_id=?)) order by o.id",account.depot(),account.role(),account.id());
         var products=jdbc.queryForList("select p.* from products p where exists(select 1 from outlets o where o.brand_code=p.brand_code and o.depot_code=? and (? <> 'MANAGER' or exists(select 1 from account_outlets s where s.outlet_id=o.id and s.account_id=?))) order by p.id",account.depot(),account.role(),account.id());
-        return Map.of("outlets",outlets,"products",products,"operatingDays",jdbc.queryForList("select * from operating_days order by day"),"source","SYNTHETIC_DEMO");
+        return Map.of("outlets",outlets,"products",products,"operatingDays",jdbc.queryForList("select * from operating_days order by day"),"source","MIXED_REVIEWED_PROJECTIONS");
     }
     public List<Map<String,Object>> vehicles(Account account) {
         role(account,"DISPATCHER");
@@ -37,13 +37,19 @@ public class OperationsService {
         var result=new LinkedHashMap<>(order);
         result.put("lines",lines(id));
         result.put("run",jdbc.queryForList("select r.*,v.name vehicle_name,v.weight_kg capacity_kg,v.volume_m3 capacity_m3,a.display_name driver_name,s.id stop_id,s.sequence stop_sequence,s.loading_sequence,s.arrival_at planned_arrival,s.service_start_at,s.service_end_at,t.plan_id from runs r join vehicles v on v.id=r.vehicle_id join accounts a on a.id=v.driver_id left join route_stops s on s.run_id=r.id left join route_trips t on t.id=r.route_trip_id where r.order_id=?",id).stream().findFirst().orElse(null));
-        result.put("tripStops",jdbc.queryForList("select s.id stop_id,s.order_id,s.sequence,s.loading_sequence,o.outlet_id,o.status,r.plan_version from route_stops s join orders o on o.id=s.order_id join runs r on r.id=s.run_id where s.route_trip_id=(select route_trip_id from runs where order_id=?) and (? <> 'MANAGER' or exists(select 1 from account_outlets a where a.account_id=? and a.outlet_id=o.outlet_id)) order by s.sequence",id,account.role(),account.id()));
+        result.put("tripStops",jdbc.queryForList("select s.id stop_id,s.order_id,s.sequence,s.loading_sequence,o.outlet_id,o.reference,o.source_ref,t.name outlet_name,o.status,r.plan_version from route_stops s join orders o on o.id=s.order_id join outlets t on t.id=o.outlet_id join runs r on r.id=s.run_id where s.route_trip_id=(select route_trip_id from runs where order_id=?) and (? <> 'MANAGER' or exists(select 1 from account_outlets a where a.account_id=? and a.outlet_id=o.outlet_id)) order by s.sequence",id,account.role(),account.id()));
+        result.put("rescheduledTo",jdbc.queryForList("select id,reference,day from orders where rescheduled_from=?",id));
         result.put("loadingIssues",jdbc.queryForList("select i.* from loading_issues i join runs r on r.id=i.run_id where r.order_id=?",id));
         result.put("proof",jdbc.queryForList("select id,content_type,captured_at,accepted_at,notes from proofs where order_id=?",id).stream().findFirst().orElse(null));
         result.put("receipt",jdbc.queryForList("select * from receipts where order_id=?",id).stream().findFirst().orElse(null));
-        result.put("deferrals",jdbc.queryForList("select * from deferrals where order_id=? order by decision_at",id));
+        result.put("deferrals",jdbc.queryForList("with recursive lineage as (select id,rescheduled_from from orders where id=? union all select o.id,o.rescheduled_from from orders o join lineage l on o.id=l.rescheduled_from) select d.* from deferrals d join lineage l on l.id=d.order_id order by d.decision_at",id));
+        result.put("consecutive_skips",consecutiveSkips(id));
         result.put("timeline",jdbc.queryForList("select event,details,accepted_at from audit_events where order_id=? order by id",id));
         return result;
+    }
+
+    public int consecutiveSkips(UUID id) {
+        return jdbc.queryForObject("with recursive lineage as (select id,rescheduled_from,deferred_yesterday from orders where id=? union all select o.id,o.rescheduled_from,o.deferred_yesterday from orders o join lineage l on o.id=l.rescheduled_from) select greatest(coalesce(max(d.consecutive_skips),0),coalesce(max(case when l.deferred_yesterday then 1 else 0 end),0)) from lineage l left join deferrals d on d.order_id=l.id",Integer.class,id);
     }
 
     @Transactional public Map<String,Object> create(Account account,Contracts.CreateOrder request) {
@@ -90,7 +96,7 @@ public class OperationsService {
     }
 
     private void validateAssignment(Account account,Map<String,Object> order,Map<String,Object> vehicle,Contracts.Publish request) {
-        require(Boolean.TRUE.equals(order.get("demo")) && Boolean.TRUE.equals(vehicle.get("demo")),"ROUTING_VALIDATION_REQUIRED","Production publication requires verified OSRM travel, service durations and route budgets. This endpoint publishes synthetic one-stop fixtures only.");
+        require(Boolean.TRUE.equals(order.get("demo")) && Boolean.TRUE.equals(vehicle.get("demo")) && !Boolean.TRUE.equals(order.get("confirmation_required")) && jdbc.queryForObject("select demo from outlets where id=?",Boolean.class,order.get("outlet_id")),"ROUTING_VALIDATION_REQUIRED","Operational orders require road-backed planning. This endpoint is reserved for legacy supplemental workflow fixtures.");
         require(vehicle.get("depot_code").equals(account.depot()) && vehicle.get("depot_code").equals(order.get("depot_code")),"DEPOT_MISMATCH","Vehicle must operate from the outlet's depot.");
         require(Boolean.TRUE.equals(vehicle.get("available")),"VEHICLE_UNAVAILABLE","Vehicle is unavailable.");
         require(jdbc.queryForObject("select count(*) from accounts where id=? and role='LOADER' and depot_code=?",Integer.class,request.loaderId(),account.depot())==1,"LOADER_SCOPE","Select a loader from this depot.");
@@ -218,8 +224,8 @@ public class OperationsService {
         LocalDate previous=jdbc.queryForObject("select max(day) from operating_days where day<? and demo=?",LocalDate.class,day,order.get("demo"));
         Integer sameDaySkips=jdbc.queryForObject("select coalesce(max(d.consecutive_skips),0) from deferrals d join orders o on o.id=d.order_id where o.outlet_id=? and o.temperature=? and o.day=? and o.status='DEFERRED'",Integer.class,order.get("outlet_id"),order.get("temperature"),day);
         Integer previousSkips=previous==null?0:jdbc.queryForObject("select coalesce(max(d.consecutive_skips),0) from deferrals d join orders o on o.id=d.order_id where o.outlet_id=? and o.temperature=? and o.day=? and o.status='DEFERRED'",Integer.class,order.get("outlet_id"),order.get("temperature"),previous);
-        int baseline=Boolean.TRUE.equals(order.get("deferred_yesterday"))?1:0;
-        int skips=sameDaySkips>0?sameDaySkips:Math.max(previousSkips,baseline)+1;
+        int baseline=consecutiveSkips(id);
+        int skips=Math.max(sameDaySkips,Math.max(previousSkips,baseline)+1);
         jdbc.update("insert into deferrals values(?,?,?,?,now(),?,?)",UUID.randomUUID(),id,account.id(),request.reason(),request.nextDay(),skips);
         update(id,"DEFERRED"); audit(account,id,"ORDER_DEFERRED",request.reason()+" · next eligible "+request.nextDay()); return detail(account,id);
     }

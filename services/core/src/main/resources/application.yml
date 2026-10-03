@@ -40,3 +40,4 @@ waypoint:
   planning-url: ${PLANNING_URL:http://localhost:8000}
   demo-seed: ${DEMO_SEED:false}
   network-import: ${NETWORK_IMPORT:/seed/shared-network.sql}
+  planning-import: ${PLANNING_IMPORT:/seed/planning-scenario.sql}

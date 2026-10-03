@@ -22,6 +22,7 @@ public class DemoSeed implements CommandLineRunner {
             jdbc.update("insert into accounts(id,username,display_name,password_hash,role,depot_code,demo) values(?,?,?,?,?,'PELIYAGODA',true) on conflict(id) do nothing",
                 "DEMO-"+role.getValue(),role.getKey(),"Demo "+role.getKey(),passwords.encode("WaypointDemo!2026"),role.getValue());
         }
+        jdbc.update("update accounts set administration_enabled=true,network_read_all=true where id='DEMO-DISPATCHER' and demo");
         outlet("DEMO-FRESH","Demo Fresh · Kelaniya","FRESH","ANY","05:00","08:00");
         outlet("DEMO-STYLE","Demo Style · Mall access","STYLE","VAN_ONLY","10:00","12:00");
         outlet("DEMO-TECH","Demo Tech · Protected receiving","TECH","ANY","09:00","16:00");
@@ -33,9 +34,12 @@ public class DemoSeed implements CommandLineRunner {
         product("DEMO-GARMENTS","Hanging garment cartons","STYLE","carton",8,0.15,"AMBIENT",null,null,"Upright; mall receiving 10:00–12:00");
         product("DEMO-TV","55-inch television","TECH","unit",18,0.25,"AMBIENT",null,null,"Fragile / high value · keep upright; inspect packaging");
         product("DEMO-WASHER","Washing machine","TECH","unit",65,0.5,"AMBIENT",null,null,"Heavy / protected handling · two-person receiving");
+        jdbc.update("update products set catalog_enabled=true,provenance='Supplemental judge catalogue; not verified source SKUs' where demo");
         vehicle("DEMO-DRY","Demo dry-box truck","TRUCK",false,null,null,1000,8,120);
         vehicle("DEMO-VAN","Demo dry van","VAN",false,null,null,300,3,80);
         vehicle("DEMO-COLD","Demo refrigerated truck","TRUCK",true,-25.0,8.0,900,7,120);
+        jdbc.update("update outlets set record_provenance='Supplemental judge outlet; not a verified source store' where demo");
+        jdbc.update("update vehicles set record_provenance='Supplemental judge vehicle; not a verified source asset' where demo");
         // Explicit fixture calendar: not an inferred source calendar. Fixed dates make reset reproducible.
         for(LocalDate day=LocalDate.of(2026,10,5); !day.isAfter(LocalDate.of(2026,10,31)); day=day.plusDays(1)) {
             if(day.getDayOfWeek()!=java.time.DayOfWeek.SUNDAY) jdbc.update("insert into operating_days(day,demo) values(?,true) on conflict do nothing",day);
@@ -51,7 +55,7 @@ public class DemoSeed implements CommandLineRunner {
         jdbc.update("insert into outlets(id,name,brand_code,depot_code,district,access,window_start,window_end,demo) values(?,?,?,'PELIYAGODA','Colombo',?,cast(? as time),cast(? as time),true) on conflict(id) do nothing",id,name,brand,access,start,end);
     }
     private void product(String id,String name,String brand,String unit,double kg,double m3,String temp,Double min,Double max,String handling) {
-        jdbc.update("insert into products values(?,?,?,?,?,?,?,?,?,?,true) on conflict(id) do nothing",id,name,brand,unit,kg,m3,temp,min,max,handling);
+        jdbc.update("insert into products(id,name,brand_code,unit,weight_kg,volume_m3,temperature,min_c,max_c,handling,demo) values(?,?,?,?,?,?,?,?,?,?,true) on conflict(id) do nothing",id,name,brand,unit,kg,m3,temp,min,max,handling);
     }
     private void vehicle(String id,String name,String kind,boolean cold,Double min,Double max,double kg,double m3,double fuel) {
         jdbc.update("insert into vehicles(id,name,depot_code,kind,refrigerated,min_c,max_c,weight_kg,volume_m3,weekly_fuel_l,driver_id,available,demo) values(?,?,'PELIYAGODA',?,?,?,?,?,?,?,'DEMO-DRIVER',true,true) on conflict(id) do nothing",id,name,kind,cold,min,max,kg,m3,fuel);

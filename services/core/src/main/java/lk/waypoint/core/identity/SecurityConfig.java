@@ -17,7 +17,7 @@ public class SecurityConfig {
         return username -> jdbc.query("select * from accounts where username=?", (r,i) -> new Account(r.getString("id"),r.getString("username"),r.getString("display_name"),r.getString("password_hash"),r.getString("role"),r.getString("depot_code"),r.getBoolean("enabled")), username)
             .stream().findFirst().orElseThrow(() -> new UsernameNotFoundException("Invalid credentials"));
     }
-    @Bean SecurityFilterChain security(HttpSecurity http) throws Exception {
+    @Bean SecurityFilterChain security(HttpSecurity http,JdbcTemplate jdbc) throws Exception {
         // Session-backed CSRF token is returned by /auth/csrf (including after login).
         http.authorizeHttpRequests(a -> a.requestMatchers("/actuator/health", "/actuator/health/readiness", "/api/v1/network", "/api/v1/auth/csrf", "/api/v1/auth/login").permitAll().anyRequest().authenticated())
             .formLogin(f -> f.loginProcessingUrl("/api/v1/auth/login")
@@ -27,6 +27,7 @@ public class SecurityConfig {
             .exceptionHandling(e -> e.authenticationEntryPoint((q,s,x) -> { s.setStatus(401); s.setContentType("application/json"); s.getWriter().write("{\"code\":\"AUTH_REQUIRED\",\"message\":\"Sign in to continue.\"}"); })
                 .accessDeniedHandler((q,s,x) -> { s.setStatus(403); s.setContentType("application/json"); s.getWriter().write("{\"code\":\"ACCESS_DENIED\",\"message\":\"Permission or CSRF token missing.\"}"); }))
             .requestCache(c -> c.disable());
+        http.addFilterBefore(new ActiveAccountFilter(jdbc),org.springframework.security.web.access.intercept.AuthorizationFilter.class);
         return http.build();
     }
 }

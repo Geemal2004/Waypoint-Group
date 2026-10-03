@@ -51,8 +51,8 @@ public class PlanningService {
     }
     public Map<String,Object> context(Account a,LocalDate day) {
         dispatcher(a);
-        var orders=db.queryForList("select o.*,t.name outlet_name,t.brand_code,t.district,t.access,t.window_start,t.window_end,t.dock_type from orders o join outlets t on t.id=o.outlet_id where t.depot_code=? and o.day=? order by o.deferred_yesterday desc,o.days_since_last_served desc,o.source_ref",a.depot(),day);
-        for(var o:orders) { o.put("weight_kg",weight(o,"weight_kg"));o.put("volume_m3",weight(o,"volume_m3"));o.put("service_minutes",service(o));o.put("consecutive_skips",Math.max(Boolean.TRUE.equals(o.get("deferred_yesterday"))?1:0,db.queryForObject("select coalesce(max(consecutive_skips),0) from deferrals where order_id=?",Integer.class,o.get("id")))); }
+        var orders=db.queryForList("select o.*,t.name outlet_name,t.brand_code,t.district,t.access,t.window_start,t.window_end,t.dock_type,p.longitude,p.latitude,p.supplemental from orders o join outlets t on t.id=o.outlet_id left join routing_points p on p.point_id=t.id where t.depot_code=? and o.day=? order by o.deferred_yesterday desc,o.days_since_last_served desc,o.source_ref",a.depot(),day);
+        for(var o:orders) { o.put("weight_kg",weight(o,"weight_kg"));o.put("volume_m3",weight(o,"volume_m3"));o.put("service_minutes",service(o));o.put("consecutive_skips",operations.consecutiveSkips((UUID)o.get("id"))); }
         var versions=db.queryForList("select version from planning_days where depot_code=? and day=?",a.depot(),day);
         LocalDate monday=day.with(DayOfWeek.MONDAY);
         var vehicles=db.queryForList("select v.*,a.enabled driver_enabled,coalesce((select sum(t.fuel_l) from route_trips t where t.vehicle_id=v.id and t.day between ? and ?),0)+coalesce((select sum(r.estimated_fuel_l) from runs r where r.vehicle_id=v.id and r.day between ? and ? and r.route_trip_id is null),0) reserved_fuel_l from vehicles v join accounts a on a.id=v.driver_id where v.depot_code=? order by v.id",monday,monday.plusDays(6),monday,monday.plusDays(6),a.depot());
@@ -67,7 +67,7 @@ public class PlanningService {
         dispatcher(a);
         var payload=new LinkedHashMap<>(context(a,request.day()));
         @SuppressWarnings("unchecked") var all=(List<Map<String,Object>>)payload.get("orders");
-        var selected=all.stream().filter(o->"RECEIVED".equals(o.get("status"))&&(request.orderIds().isEmpty()||request.orderIds().contains(o.get("id")))).toList();
+        var selected=all.stream().filter(o->"RECEIVED".equals(o.get("status"))&&(!Boolean.TRUE.equals(o.get("confirmation_required"))||o.get("confirmed_at")!=null)&&(request.orderIds().isEmpty()||request.orderIds().contains(o.get("id")))).toList();
         require(selected.size()<=98,"MATRIX_LIMIT","Select at most 98 orders per proposal.");
         require(!selected.isEmpty(),"EMPTY_PLAN","Select unallocated orders.");
         var points=new ArrayList<RoutingAdapter.Point>();points.add(point(a.depot()));
@@ -76,7 +76,7 @@ public class PlanningService {
         payload.put("fleetStatus",db.queryForList("select * from scenario_fleet"));
         payload.put("districtBudgets",db.queryForList("select payload->>'district' district,(payload->>'depot_to_district_freeflow_min')::numeric outbound,(payload->>'inter_stop_freeflow_min')::numeric inter from source_records where file='district_travel.csv'"));
         payload.put("loaderId",one("select id from accounts where role='LOADER' and enabled and depot_code=? order by demo desc,id limit 1",a.depot()).get("id"));
-        Object nextDay=one("select min(day) as next_day from operating_days where day>? and demo=false",request.day()).get("next_day");
+        Object nextDay=one("select min(day) as next_day from operating_days where day>? and demo=?",request.day(),selected.getFirst().get("demo")).get("next_day");
         require(nextDay!=null,"CALENDAR_EXHAUSTED","No later source operating date is available for deferrals. Extend the audited calendar first.");
         payload.put("nextDay",nextDay);
         payload.put("freshOnlyReefers",freshOnlyReefers);payload.put("turnaroundMinutes",turnaroundMinutes);
@@ -115,6 +115,7 @@ public class PlanningService {
                 fail(failures,((Number)o.get("version")).intValue()==stop.expectedVersion(),"STALE_ORDER","Refresh this order before planning.",stop.orderId());
                 fail(failures,plan.day().equals(((java.sql.Date)o.get("day")).toLocalDate()),"ORDER_DAY","Order and trip must use the same operating day.",stop.orderId());
                 fail(failures,(trip.existingTripId()==null?"RECEIVED":"SCHEDULED").equals(o.get("status")),"MANIFEST_LOCKED","Only unallocated orders or untouched scheduled manifests can be adjusted.",stop.orderId());
+                fail(failures,!Boolean.TRUE.equals(o.get("confirmation_required"))||o.get("confirmed_at")!=null,"ORDER_UNCONFIRMED","Confirm the reviewed store submission before allocation.",stop.orderId());
                 if(brand==null) { brand=(String)o.get("brand_code");district=(String)o.get("district");temperature=(String)o.get("temperature"); }
                 fail(failures,brand.equals(o.get("brand_code"))&&district.equals(o.get("district")),"BRAND_DISTRICT","Each trip must contain one brand and district.",stop.orderId());
                 fail(failures,temperature.equals(o.get("temperature")),"SEPARATE_TEMPERATURE_LOADS","Fresh dry and chilled orders require separate trips.",stop.orderId());
@@ -204,6 +205,17 @@ public class PlanningService {
             double allowed=db.queryForObject("select weekly_fuel_l from vehicles where id=?",Double.class,vehicle);
             fail(failures,used<=allowed,"WEEKLY_FUEL","Road kilometres divided by source km/L exceed this week's litre allowance.",vehicle);
         }
+    }
+    /** Internal automatic republication of one owned amendment; preserve the real actor in audit. */
+    @Transactional public Map<String,Object> publishStoreAmendment(Account actor,UUID amendedOrder,Plan plan) {
+        if(!actor.role().equals("MANAGER"))throw new ApiException(403,"ROLE_REQUIRED","Store manager access required.");
+        operations.scopedOrder(actor,amendedOrder);
+        require(plan.trips().size()==1&&plan.deferred().isEmpty(),"AMENDMENT_SCOPE","An amendment republishes its existing trip only.");
+        var t=one("select t.* from route_trips t join route_stops s on s.route_trip_id=t.id where s.order_id=?",amendedOrder);
+        var trip=plan.trips().getFirst();
+        require(t.get("id").equals(trip.existingTripId())&&t.get("vehicle_id").equals(trip.vehicleId())&&t.get("loader_id").equals(trip.loaderId())&&((Timestamp)t.get("departure_at")).toInstant().equals(trip.departureAt())&&((java.sql.Date)t.get("day")).toLocalDate().equals(plan.day())&&((Number)t.get("trip")).intValue()==trip.trip(),"AMENDMENT_SCOPE","Store amendments cannot change vehicle, membership, loading owner, departure or day.");
+        // The validator remains the same; this scoped internal delegation retains the manager ID.
+        return publish(new Account(actor.id(),actor.username(),actor.displayName(),actor.password(),"DISPATCHER",actor.depot(),actor.enabled()),plan);
     }
     @Transactional public Map<String,Object> publish(Account a,Plan plan) {
         dispatcher(a);

@@ -88,5 +88,5 @@ def allocate(data):
             reason='; '.join(dict.fromkeys(reasons))[:500]
             if eligible and order['volume_m3']>max(v['volume_m3'] for v in eligible):reason='VOLUME_LIMIT: whole order exceeds every eligible vehicle; arrange additional capacity or agree a later order revision'
             deferred.append({'orderId':order['id'],'expectedVersion':order['version'],'reason':reason or 'NO_FEASIBLE_SLOT: adjust fleet, timing or demand','nextDay':data['nextDay']})
-    return {'day':day,'expectedPlanVersion':data['version'],'reason':'Assisted whole-order road-matrix insertion; Spring independently validates before publication.',
+    return {'day':day,'expectedPlanVersion':data['version'],'reason':'Assisted allocation reviewed for road timing, store access and vehicle capacity.',
         'trips':[{'existingTripId':t['existingTripId'],'vehicleId':t['vehicleId'],'trip':t['trip'],'loaderId':t['loaderId'],'departureAt':t['_start'].astimezone(timezone.utc).isoformat(),'stops':[{'orderId':o['id'],'expectedVersion':o['version']} for o in t['_orders']]} for t in proposed], 'deferred':deferred}

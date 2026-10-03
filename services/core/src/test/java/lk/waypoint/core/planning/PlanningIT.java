@@ -51,7 +51,7 @@ class PlanningIT {
         db.update("update vehicles set km_per_l=10 where demo=true");db.update("update outlets set dock_type='street' where demo=true");
         db.update("insert into source_records values('district_travel.csv','Colombo','{\"district\":\"Colombo\",\"depot_to_district_freeflow_min\":20,\"inter_stop_freeflow_min\":5}'::jsonb)");
         for(String brand:List.of("Fresh","Style","Tech"))db.update("insert into source_records values('service_allowance.csv',?,?::jsonb)",brand+"|street","{\"brand\":\""+brand+"\",\"dock_type\":\"street\",\"service_allowance_min\":16}");
-        for(String id:List.of("PELIYAGODA","DEMO-FRESH","DEMO-TECH","DEMO-STYLE"))db.update("insert into routing_points values(?,79.9,6.9,'Isolated routing fixture',true)",id);
+        for(String id:List.of("PELIYAGODA","DEMO-FRESH","DEMO-TECH","DEMO-STYLE"))db.update("insert into routing_points(point_id,longitude,latitude,provenance,supplemental) values(?,79.9,6.9,'Isolated routing fixture',true)",id);
         when(routing.route(anyList())).thenAnswer(invocation->{List<?> points=invocation.getArgument(0);return new RoutingAdapter.RoadRoute(java.util.stream.IntStream.range(1,points.size()).mapToObj(i->new RoutingAdapter.Leg(300,1000)).toList(),Map.of("type","LineString","coordinates",List.of(List.of(79.9,6.9),List.of(79.91,6.91))),Map.of("provider","OSRM test double"));});
     }
     @Test void multiStopPublicationPreservesIdentitiesAndRequiresAllReleasedLoads(){
