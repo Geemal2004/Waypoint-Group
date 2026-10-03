@@ -30,6 +30,14 @@ if docker volume inspect waypoint-judge_postgres-data >/dev/null 2>&1; then
 fi
 # Serial builds keep the 4 GB instance from compiling Java and Node together.
 for service in planning core web; do "${compose[@]}" build "$service"; done
+# Spring runs as a non-root user. Grant its group read access only to source
+# imports; cloud.env and the account-rotation SQL retain owner-only access.
+core_gid="$(docker run --rm --entrypoint id waypoint-judge-core -g)"
+sudo chgrp "$core_gid" "$shared/private" "$shared/private/shared-network.sql" "$shared/private/planning-scenario.sql"
+sudo chmod 750 "$shared/private"
+sudo chmod 640 "$shared/private/shared-network.sql" "$shared/private/planning-scenario.sql"
+chmod 600 "$shared/cloud.env" "$shared/private/cloud-accounts.sql"
+docker run --rm --entrypoint sh -v "$shared/private:/seed:ro" waypoint-judge-core -c 'test -r /seed/shared-network.sql && test -r /seed/planning-scenario.sql && test ! -r /seed/cloud-accounts.sql'
 "${compose[@]}" up -d --wait --wait-timeout 300 db redis planning osrm core web
 # Rotate freshly seeded defaults before the HTTPS edge is started. The private
 # SQL changes only accounts still using the public default password.
