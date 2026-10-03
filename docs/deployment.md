@@ -2,6 +2,8 @@
 
 The local judge runs on loopback with explicit demo accounts. Production uses an isolated Compose project and volume. Public hosting and real mobile deployment remain unverified.
 
+The competition AWS rollout is tracked in [AWS deployment](aws-deployment.md). It preserves judge mode rather than using the production override, which disables demo seeding.
+
 ## HTTPS startup
 
 Prepare private `data/private/production-network.sql` through the validated network preparation workflow. Review source coordinates, cold capabilities, selectable catalogue and operating dates before operational use. S1/legacy order seeding is judge-only; production starts without synthetic assignments. Provision real orders through authenticated drafts/submission. The shared network import retains its digest guard and raw source records.
