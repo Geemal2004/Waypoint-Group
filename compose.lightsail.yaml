@@ -1,19 +1,28 @@
 # Competition instance: persistent judge data and HTTPS at the edge.
+x-cloud-logging: &cloud-logging
+  driver: json-file
+  options:
+    max-size: '10m'
+    max-file: '3'
 services:
   db:
+    logging: *cloud-logging
     restart: unless-stopped
     environment:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set the private cloud database password}
     mem_limit: 768m
   redis:
+    logging: *cloud-logging
     restart: unless-stopped
     command: redis-server --maxmemory 64mb --maxmemory-policy noeviction
     mem_limit: 128m
   planning:
+    logging: *cloud-logging
     restart: unless-stopped
     ports: !override []
     mem_limit: 384m
   core:
+    logging: *cloud-logging
     restart: unless-stopped
     ports: !override []
     environment:
@@ -24,6 +33,7 @@ services:
       LOGGING_STRUCTURED_FORMAT_CONSOLE: ecs
     mem_limit: 896m
   web:
+    logging: *cloud-logging
     build:
       args:
         VITE_SHOW_DEMO_PASSWORD: "false"
@@ -33,11 +43,13 @@ services:
       - ./deploy/lightsail/nginx.conf:/etc/nginx/conf.d/default.conf:ro
     mem_limit: 128m
   osrm:
+    logging: *cloud-logging
     restart: unless-stopped
     ports: !override []
     mem_limit: 1024m
   edge:
-    image: caddy:2-alpine
+    logging: *cloud-logging
+    image: caddy:2-alpine@sha256:881bbc60f9986d5ab8e7cfd6cf7e4ef3c9c0439fef2429d035d065577882f028
     restart: unless-stopped
     environment:
       WAYPOINT_HOST: ${WAYPOINT_HOST:?Set the public HTTPS hostname}

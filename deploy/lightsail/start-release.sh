@@ -3,6 +3,8 @@ set -euo pipefail
 release="$(realpath "${1:?Pass /opt/waypoint/releases/<commit>}")"
 [[ "$release" =~ ^/opt/waypoint/releases/[a-f0-9]{40}$ ]] || { echo 'Invalid release directory'; exit 1; }
 shared=/opt/waypoint/shared
+exec 9> "$shared/deploy.lock"
+flock -n 9 || { echo 'Another deployment is in progress'; exit 1; }
 test -s "$shared/cloud.env"
 test -s "$shared/private/shared-network.sql"
 test -s "$shared/private/planning-scenario.sql"
@@ -22,7 +24,8 @@ ln -sfn "$shared/cloud.env" "$release/.env"
 cd "$release"
 compose=(docker compose -p waypoint-judge -f compose.yaml -f compose.lightsail.yaml --profile routing)
 "${compose[@]}" config --quiet
-if [[ -n "$("${compose[@]}" ps -q db)" ]]; then
+if docker volume inspect waypoint-judge_postgres-data >/dev/null 2>&1; then
+  "${compose[@]}" up -d --wait --wait-timeout 120 db
   bash "$release/deploy/lightsail/backup.sh" "$release"
 fi
 # Serial builds keep the 4 GB instance from compiling Java and Node together.

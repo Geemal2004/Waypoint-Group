@@ -2,6 +2,8 @@
 
 The competition target is an Ubuntu 24.04 Lightsail instance at `18.138.29.235`, with 4 GB RAM, 2 vCPUs and 80 GB SSD. Docker and Compose are installed; SSH connectivity and free disk were inspected on 4 October 2026. The HTTPS hostname is `18-138-29-235.sslip.io` because no owned domain was supplied. The application rollout and public HTTPS checks remain pending.
 
+On 4 October, the source archive checksum and Linux scripts were checked on the server; Spring, Python and the production frontend images built successfully. Caddy configuration validated on that host and its image digest is pinned. Private input/configuration transfer is pending explicit authorization after automatic approval review rejected that export. Public services have not been started. Logs: ignored `tmp/lightsail-build.log` and `tmp/lightsail-edge-validation.log`. A Windows archive line-ending problem was corrected using `.gitattributes`; incomplete task packages/downloads were removed after local disk exhaustion, preserving source data and the local database.
+
 Preparation verified on 3 October 2026: both PowerShell scripts parse; the release archive was created and inspected (189 committed files, no `.env` or private data); missing CLI fails explicitly. AWS CLI is not installed or authenticated here. The official installer download timed out before completion; no unverified installer was executed. Cloud deployment and cloud smoke tests remain pending.
 
 ## Lightsail competition release
@@ -25,7 +27,7 @@ After approved private inputs and a source release are installed:
 bash /opt/waypoint/releases/<commit>/deploy/lightsail/start-release.sh /opt/waypoint/releases/<commit>
 ```
 
-The script checks required inputs, backs up an existing cloud database before migrations, builds services serially for the 4 GB host, starts internal services, replaces fresh public demo passwords through audited SQL, then starts HTTPS. Rotation changes only accounts still using the documented default password; later account changes survive redeployment. It records deployed image IDs/digests and advances `current` after startup. Never invoke demo reset during a release.
+The script checks required inputs, locks against concurrent deployments, backs up an existing cloud database before migrations, builds services serially for the 4 GB host, starts internal services, replaces fresh public demo passwords through audited SQL, then starts HTTPS. Rotation changes only accounts still using the documented default password; later account changes survive redeployment. It records deployed image IDs/digests and advances `current` after startup. Container logs rotate at 10 MB with three files per service. Never invoke demo reset during a release.
 
 ```bash
 bash /opt/waypoint/current/deploy/lightsail/backup.sh
