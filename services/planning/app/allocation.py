@@ -55,7 +55,7 @@ def allocate(data):
         if sum(t[3] for t in daily if t[4]=='FRESH')>270 or sum(t[3] for t in daily if t[4]!='FRESH')>480:return None,'TRIP_BUDGET: daily audited brand budget exhausted'
         if v['reserved_fuel_l']+sum(t['_fuel'] for t in others)+fuel>v['weekly_fuel_l']:return None,'WEEKLY_FUEL: weekly litre allowance exhausted'
         return {'_start':start,'_end':end,'_fuel':fuel,'_budget':budget,'_brand':first['brand_code']},''
-    priority=sorted(orders,key=lambda o:(not o.get('deferred_yesterday'),-o.get('days_since_last_served',0),o['window_end'],o.get('source_ref') or o['id']))
+    priority=sorted(orders,key=lambda o:(not o.get('deferred_yesterday'),-(o.get('days_since_last_served') or 0),o['window_end'],o.get('source_ref') or o['id']))
     for order in priority:
         selected=None;best=None;reasons=[]
         for v in vehicles:

@@ -47,3 +47,13 @@ def test_more_than_two_required_groups_records_deferred_demand():
     assert len(result['trips'])==2
     assert len(result['deferred'])==1
     assert 'TRIP_LIMIT' in result['deferred'][0]['reason']
+
+
+def test_new_catalogue_orders_without_source_history_are_allocated_or_deferred():
+    data=fixture()
+    for order in data['orders']:
+        order.update(source_ref=None,scenario=None,days_since_last_served=None,deferred_yesterday=None)
+    data['orders'][0]['volume_m3']=100
+    result=allocate(data)
+    assert any(d['orderId']=='0' and 'VOLUME_LIMIT' in d['reason'] for d in result['deferred'])
+    assert {s['orderId'] for t in result['trips'] for s in t['stops']}=={'1','2'}
