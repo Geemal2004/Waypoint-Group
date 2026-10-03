@@ -1,0 +1,2 @@
+# Shell scripts must survive Windows checkout and Linux release extraction.
+*.sh text eol=lf
