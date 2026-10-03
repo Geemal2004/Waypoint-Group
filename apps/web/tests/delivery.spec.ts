@@ -114,20 +114,23 @@ async function manual(p: Page, refs: string[], vehicle: string) {
 test("source multi-stop online handoff, approved shortage and durable offline conflict recovery", async ({
   browser,
 }) => {
+  const sourceFirst = process.env.JUDGE_SOURCE_FIRST || "S1-008";
+  const sourceSecond = process.env.JUDGE_SOURCE_SECOND || "S1-006";
+  const sourceVehicle = process.env.JUDGE_SOURCE_VEHICLE || "VEH008";
   test.setTimeout(300000);
   const { contexts, pages } = await roles(browser);
   const [m, d, l, v] = pages;
   try {
     const context = await call(d, "/planning?day=2026-01-08"),
-      first = context.orders.find((o: any) => o.source_ref === "S1-008"),
-      second = context.orders.find((o: any) => o.source_ref === "S1-006");
+      first = context.orders.find((o: any) => o.source_ref === sourceFirst),
+      second = context.orders.find((o: any) => o.source_ref === sourceSecond);
     expect(
       first,
       "Prepare private S1 and reset the isolated judge database",
     ).toBeTruthy();
     expect(first.status).toBe("RECEIVED");
     expect(second.status).toBe("RECEIVED");
-    await manual(d, ["S1-008", "S1-006"], "VEH008");
+    await manual(d, [sourceFirst, sourceSecond], sourceVehicle);
     await assigned(l, "Assigned load", first.id);
     await expect(
       l.getByRole("heading", {
@@ -162,7 +165,7 @@ test("source multi-stop online handoff, approved shortage and durable offline co
         await d
           .getByRole("button", { name: "Orders / cutoff", exact: true })
           .click();
-        await d.getByRole("button", { name: "S1-008", exact: true }).click();
+        await d.getByRole("button", { name: sourceFirst, exact: true }).click();
         await d
           .getByLabel("Decision reason")
           .fill(
@@ -191,9 +194,9 @@ test("source multi-stop online handoff, approved shortage and durable offline co
       .click();
     await proof(v);
     await expect(
-      v.getByText("S1-008 · Accepted by server", { exact: true }),
+      v.getByText(`${sourceFirst} · Accepted by server`, { exact: true }),
     ).toBeVisible();
-    await store(m, first.outlet_id, "S1-008");
+    await store(m, first.outlet_id, sourceFirst);
     await m
       .getByRole("button", { name: "Confirm received", exact: true })
       .click();
@@ -211,6 +214,7 @@ test("source multi-stop online handoff, approved shortage and durable offline co
         exact: true,
       })
       .click();
+    await expect(v.getByLabel("Delivery photo", { exact: true })).toBeVisible();
     await v.evaluate(async () => {
       await navigator.serviceWorker.ready;
     });
@@ -224,7 +228,9 @@ test("source multi-stop online handoff, approved shortage and durable offline co
     await v.reload();
     await v.getByRole("button", { name: "Sync", exact: true }).click();
     await expect(
-      v.getByText("S1-006 · Saved on device · pending sync", { exact: true }),
+      v.getByText(`${sourceSecond} · Saved on device · pending sync`, {
+        exact: true,
+      }),
     ).toBeVisible();
     await noOverflow(v);
     const latest = await call(d, `/orders/${second.id}`);
@@ -236,7 +242,7 @@ test("source multi-stop online handoff, approved shortage and durable offline co
     });
     await contexts[3].setOffline(false);
     await expect(
-      v.getByText("S1-006 · Conflict needs review", { exact: true }),
+      v.getByText(`${sourceSecond} · Conflict needs review`, { exact: true }),
     ).toBeVisible();
     await d.getByRole("button", { name: "History", exact: true }).click();
     await d
@@ -257,9 +263,9 @@ test("source multi-stop online handoff, approved shortage and durable offline co
       .toBe("ACCEPTED");
     await v.getByRole("button", { name: "Retry sync", exact: true }).click();
     await expect(
-      v.getByText("S1-006 · Accepted by server", { exact: true }),
+      v.getByText(`${sourceSecond} · Accepted by server`, { exact: true }),
     ).toBeVisible();
-    await store(m, second.outlet_id, "S1-006");
+    await store(m, second.outlet_id, sourceSecond);
     await m
       .getByRole("button", { name: "Confirm received", exact: true })
       .click();
@@ -278,7 +284,8 @@ test("reviewed store drafts produce a versioned multi-stop road journey with liv
   const { contexts, pages } = await roles(browser);
   const [m, d, l, v] = pages;
   try {
-    const day = "2026-10-06",
+    const day = process.env.JUDGE_OPERATING_DAY || "2026-10-06",
+      rescheduleDay = process.env.JUDGE_RESCHEDULE_DAY || "2026-10-07",
       created = [];
     for (const [outlet, qty] of [
       ["OUT001", 10],
@@ -297,20 +304,19 @@ test("reviewed store drafts produce a versioned multi-stop road journey with liv
       await m
         .getByRole("button", { name: "Review order", exact: true })
         .click();
+      const submission = m.waitForResponse(
+        (response) =>
+          response.request().method() === "POST" &&
+          /\/api\/v1\/drafts\/[^/]+\/submit$/.test(
+            new URL(response.url()).pathname,
+          ) &&
+          response.status() === 200,
+      );
       await m
         .getByRole("button", { name: "Submit reviewed order", exact: true })
         .click();
       await expect(m.getByText(/Order WP-.*submitted/)).toBeVisible();
-      created.push(
-        (await call(m, "/orders"))
-          .filter(
-            (o: any) =>
-              o.outlet_id === outlet &&
-              o.day === day &&
-              o.confirmation_required,
-          )
-          .at(-1),
-      );
+      created.push(await (await submission).json());
     }
     for (const o of created) expect(o.confirmed_at).toBeNull();
     await d.getByLabel("Operating day", { exact: true }).fill(day);
@@ -476,7 +482,7 @@ test("reviewed store drafts produce a versioned multi-stop road journey with liv
       expectedVersion: deferred.version,
       operation: "RESCHEDULE",
       reason: "Retain stock demand for a later reviewed allocation",
-      day: "2026-10-07",
+      day: rescheduleDay,
     });
     expect((await call(d, `/orders/${excess.id}`)).rescheduledTo).toHaveLength(
       1,
@@ -501,10 +507,20 @@ test("Style schedule, protected Tech receipt, night mode and cross-tab account i
       .getByLabel("Hanging garment cartons quantity", { exact: true })
       .fill("3");
     await m.getByRole("button", { name: "Review order", exact: true }).click();
+    const submission = m.waitForResponse(
+      (response) =>
+        response.request().method() === "POST" &&
+        /\/api\/v1\/drafts\/[^/]+\/submit$/.test(
+          new URL(response.url()).pathname,
+        ) &&
+        response.status() === 200,
+    );
     await m
       .getByRole("button", { name: "Submit reviewed order", exact: true })
       .click();
     await expect(m.getByText(/submitted for 2026-10-12/)).toBeVisible();
+    const submitted = await (await submission).json();
+    await store(m, "DEMO-STYLE", submitted.reference);
     await expect(
       m.getByRole("heading", { name: "Mall access", exact: true }),
     ).toBeVisible();
