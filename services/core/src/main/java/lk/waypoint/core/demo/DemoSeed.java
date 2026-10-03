@@ -7,9 +7,11 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
+import org.springframework.core.annotation.Order;
 import org.springframework.transaction.annotation.Transactional;
 
 @Component
+@Order(0)
 @ConditionalOnProperty(name="waypoint.demo-seed", havingValue="true")
 public class DemoSeed implements CommandLineRunner {
     private final JdbcTemplate jdbc;

@@ -39,6 +39,9 @@ services:
       DB_PASSWORD: ${POSTGRES_PASSWORD:-waypoint_local_only}
       REDIS_HOST: redis
       PLANNING_URL: http://planning:8000
+      OSRM_URL: http://osrm:5000
+      FRESH_ONLY_REEFERS: ${FRESH_ONLY_REEFERS:-true}
+      TURNAROUND_MINUTES: ${TURNAROUND_MINUTES:-30}
       DEMO_SEED: ${DEMO_SEED:-true}
       SESSION_SECURE: ${SESSION_SECURE:-false}
     ports:
@@ -70,6 +73,8 @@ services:
   osrm:
     image: ghcr.io/project-osrm/osrm-backend:v5.27.1
     profiles: [routing]
+    ports:
+      - '127.0.0.1:${OSRM_PORT:-5000}:5000'
     volumes:
       - ./data/osrm:/data:ro
     command: osrm-routed --algorithm mld /data/sri-lanka.osrm

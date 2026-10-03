@@ -34,6 +34,9 @@ management:
       exposure:
         include: health
 waypoint:
+  osrm-url: ${OSRM_URL:http://localhost:5000}
+  fresh-only-reefers: ${FRESH_ONLY_REEFERS:true}
+  turnaround-minutes: ${TURNAROUND_MINUTES:30}
   planning-url: ${PLANNING_URL:http://localhost:8000}
   demo-seed: ${DEMO_SEED:false}
   network-import: ${NETWORK_IMPORT:/seed/shared-network.sql}
