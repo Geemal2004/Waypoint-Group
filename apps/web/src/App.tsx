@@ -16,6 +16,7 @@ import {
   Info,
 } from "lucide-react";
 import { api, ApiError, refreshCsrf } from "./lib/api";
+import { useLiveUpdates } from "./lib/live";
 import {
   cachedAccount,
   cachedRead,
@@ -49,6 +50,19 @@ export function App() {
       localStorage.getItem("waypoint-theme") === "night",
     );
   const client = useQueryClient();
+  const liveState = useLiveUpdates(account);
+  useEffect(() => {
+    const changed = () =>
+      setOperatingDay(
+        localStorage.getItem("waypoint-operating-day") || "2026-01-08",
+      );
+    window.addEventListener("waypoint-day", changed);
+    window.addEventListener("storage", changed);
+    return () => {
+      window.removeEventListener("waypoint-day", changed);
+      window.removeEventListener("storage", changed);
+    };
+  }, []);
   useEffect(() => {
     document.documentElement.dataset.theme = night ? "night" : "day";
     localStorage.setItem("waypoint-theme", night ? "night" : "day");
@@ -94,9 +108,11 @@ export function App() {
     void run();
     const timer = setInterval(run, 10000);
     window.addEventListener("online", run);
+    window.addEventListener("waypoint-operations", run);
     return () => {
       clearInterval(timer);
       window.removeEventListener("online", run);
+      window.removeEventListener("waypoint-operations", run);
     };
   }, [account, client]);
   useEffect(() => {
@@ -316,7 +332,7 @@ export function App() {
                 "Online"
               ) : (
                 <>
-                  <WifiOff size={13} /> Offline · cached view
+                  <WifiOff size={13} /> Offline
                 </>
               )}
             </span>
@@ -340,6 +356,11 @@ export function App() {
         </header>
         <main className="page-content">
           {account.role === "DISPATCHER" && (
+            <span className="live-state" role="status">
+              Updates: {liveState}
+            </span>
+          )}
+          {
             <div className="day-toolbar">
               <span>Operating day · Asia/Colombo</span>
               <input
@@ -355,7 +376,7 @@ export function App() {
                 }}
               />
             </div>
-          )}
+          }
           {demoInformation && (
             <div className="modal-backdrop">
               <section
@@ -434,6 +455,7 @@ export function App() {
             <>
               {account.role === "MANAGER" && (
                 <Manager
+                  operatingDay={operatingDay}
                   catalog={catalog.data}
                   orders={orders.data}
                   action={action}
@@ -453,10 +475,16 @@ export function App() {
                 />
               )}
               {account.role === "LOADER" && (
-                <Loader orders={orders.data} action={action} busy={busy} />
+                <Loader
+                  day={operatingDay}
+                  orders={orders.data}
+                  action={action}
+                  busy={busy}
+                />
               )}
               {account.role === "DRIVER" && (
                 <Driver
+                  day={operatingDay}
                   account={account}
                   orders={orders.data}
                   action={action}

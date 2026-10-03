@@ -2,6 +2,12 @@ import { useEffect, useState } from "react";
 import { api } from "../lib/api";
 
 export interface QueueOrder {
+  reference?: string;
+  confirmed_at?: string | null;
+  confirmation_required?: boolean;
+  longitude?: number | null;
+  latitude?: number | null;
+  supplemental?: boolean;
   id: string;
   source_ref: string;
   outlet_name: string;
@@ -129,6 +135,26 @@ export function usePlanningBoard(day: string) {
     setSelected([]);
     void refresh();
   }, [day]);
+  useEffect(() => {
+    const changed = () => {
+      void refresh();
+    };
+    window.addEventListener("waypoint-operations", changed);
+    return () => window.removeEventListener("waypoint-operations", changed);
+  }, [day]);
+  useEffect(() => {
+    if (
+      plan &&
+      context &&
+      (plan.expectedPlanVersion !== context.version ||
+        [...plan.trips.flatMap((t) => t.stops), ...plan.deferred].some(
+          (s) =>
+            context.orders.find((o) => o.id === s.orderId)?.version !==
+            s.expectedVersion,
+        ))
+    )
+      setValidation(undefined);
+  }, [context, plan]);
   async function run(task: () => Promise<void>) {
     setBusy(true);
     setError("");
@@ -171,7 +197,9 @@ export function usePlanningBoard(day: string) {
   }
   const name = (id: string) => {
     const o = context?.orders.find((o) => o.id === id);
-    return o ? `${o.source_ref} · ${o.outlet_name} · ${o.temperature}` : id;
+    return o
+      ? `${o.source_ref || o.reference || o.id} · ${o.outlet_name} · ${o.temperature}`
+      : id;
   };
   return {
     day,

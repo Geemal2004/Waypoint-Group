@@ -36,6 +36,10 @@ export function RoadMap({
   const target = useRef<HTMLDivElement>(null),
     map = useRef<maplibregl.Map>(null);
   const selected = useRef(onSelect);
+  const lastBounds = useRef("");
+  const visibleBounds = useRef<maplibregl.LngLatBounds | null>(null);
+  const dataKey = JSON.stringify(points),
+    routeKey = JSON.stringify(geometry);
   selected.current = onSelect;
   const [ready, setReady] = useState(false),
     [failure, setFailure] = useState("");
@@ -67,6 +71,18 @@ export function RoadMap({
         new maplibregl.NavigationControl({ showCompass: false }),
         "top-right",
       );
+      const resize = new ResizeObserver(() => {
+        if (!target.current?.clientWidth) return;
+        instance.resize();
+        if (visibleBounds.current)
+          instance.fitBounds(visibleBounds.current, {
+            padding: 35,
+            maxZoom: 14,
+            duration: 0,
+          });
+      });
+      resize.observe(target.current);
+      instance.on("remove", () => resize.disconnect());
       instance.on("style.load", () => {
         instance.addSource("points", {
           type: "geojson",
@@ -86,6 +102,33 @@ export function RoadMap({
             "circle-stroke-width": 2,
             "circle-stroke-color": "#fff",
           },
+        });
+        const clusterLabels = new Map<number, maplibregl.Marker>();
+        instance.on("render", () => {
+          if (!instance.isSourceLoaded("points")) return;
+          const shown = new Set<number>();
+          for (const f of instance.querySourceFeatures("points")) {
+            if (!f.properties?.cluster || f.geometry.type !== "Point") continue;
+            const id = Number(f.properties.cluster_id);
+            shown.add(id);
+            if (!clusterLabels.has(id)) {
+              const label = document.createElement("span");
+              label.className = "map-cluster-label";
+              label.textContent = String(f.properties.point_count_abbreviated);
+              label.style.pointerEvents = "none";
+              clusterLabels.set(
+                id,
+                new maplibregl.Marker({ element: label })
+                  .setLngLat(f.geometry.coordinates as [number, number])
+                  .addTo(instance),
+              );
+            }
+          }
+          for (const [id, marker] of clusterLabels)
+            if (!shown.has(id)) {
+              marker.remove();
+              clusterLabels.delete(id);
+            }
         });
         instance.addLayer({
           id: "points",
@@ -184,12 +227,32 @@ export function RoadMap({
     });
     const coordinates =
       geometry?.coordinates || points.map((p) => [p.longitude, p.latitude]);
-    if (coordinates.length) {
+    const boundsKey = JSON.stringify([
+      geometry?.coordinates,
+      points.map((p) => p.id),
+    ]);
+    if (coordinates.length && boundsKey !== lastBounds.current) {
+      lastBounds.current = boundsKey;
       const bounds = new maplibregl.LngLatBounds();
       coordinates.forEach((p) => bounds.extend(p as [number, number]));
+      visibleBounds.current = bounds;
       m.fitBounds(bounds, { padding: 35, maxZoom: 14, duration: 0 });
     }
-  }, [points, geometry, ready]);
+    const markers = points
+      .filter((p) => p.kind === "checkpoint")
+      .map((p) => {
+        const label = document.createElement("button");
+        label.className = "map-checkpoint" + (p.completed ? " completed" : "");
+        label.textContent = String(p.sequence);
+        label.title = p.label;
+        label.setAttribute("aria-label", `Stop ${p.sequence}: ${p.label}`);
+        label.onclick = () => selected.current?.(p.id);
+        return new maplibregl.Marker({ element: label })
+          .setLngLat([p.longitude, p.latitude])
+          .addTo(m);
+      });
+    return () => markers.forEach((marker) => marker.remove());
+  }, [dataKey, routeKey, ready]);
   return (
     <div className="road-map-wrap">
       <div ref={target} className="road-map" role="region" aria-label={label} />

@@ -15,6 +15,10 @@ export interface Outlet {
   access: string;
 }
 export interface Product {
+  catalog_enabled?: boolean;
+  unit?: string;
+  handling?: string;
+  provenance?: string;
   demo: boolean;
   id: string;
   name: string;
@@ -53,6 +57,10 @@ export interface Run {
   partial_reason: string | null;
 }
 export interface Order {
+  reference?: string;
+  confirmation_required?: boolean;
+  confirmed_at?: string | null;
+  rescheduledTo?: { id: string; reference: string; day: string }[];
   source_ref?: string;
   tripStops?: {
     stop_id: string;
@@ -60,6 +68,9 @@ export interface Order {
     sequence: number;
     loading_sequence: number;
     outlet_id: string;
+    outlet_name?: string;
+    reference?: string;
+    source_ref?: string;
     status: string;
     plan_version: number;
   }[];
@@ -101,6 +112,7 @@ export interface Vehicle {
   available: boolean;
 }
 export interface Conflict {
+  current_version: number;
   id: string;
   order_id: string;
   state: string;

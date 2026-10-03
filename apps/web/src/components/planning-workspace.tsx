@@ -31,9 +31,11 @@ export function PlanningBoard({ day = "2026-01-08" }: { day?: string }) {
   const queue =
     context?.orders.filter(
       (o) =>
-        (showAll || o.status === "RECEIVED") &&
+        (showAll ||
+          (o.status === "RECEIVED" &&
+            (!o.confirmation_required || !!o.confirmed_at))) &&
         (!brand || o.brand_code === brand) &&
-        `${o.source_ref} ${o.outlet_name} ${o.district}`
+        `${o.source_ref || o.reference} ${o.outlet_name} ${o.district}`
           .toLowerCase()
           .includes(search.toLowerCase()),
     ) || [];
@@ -202,8 +204,11 @@ export function PlanningBoard({ day = "2026-01-08" }: { day?: string }) {
                     <td>
                       <input
                         type="checkbox"
-                        aria-label={`Select ${o.source_ref}`}
-                        disabled={o.status !== "RECEIVED"}
+                        aria-label={`Select ${o.source_ref || o.reference}`}
+                        disabled={
+                          o.status !== "RECEIVED" ||
+                          (!!o.confirmation_required && !o.confirmed_at)
+                        }
                         checked={selected.includes(o.id)}
                         onChange={(e) =>
                           m.setSelected(
@@ -217,7 +222,8 @@ export function PlanningBoard({ day = "2026-01-08" }: { day?: string }) {
                     <td>
                       <strong>{o.outlet_name}</strong>
                       <small>
-                        {o.source_ref} · {o.temperature.toLowerCase()}
+                        {o.source_ref || o.reference} ·{" "}
+                        {o.temperature.toLowerCase()}
                       </small>
                       <small>
                         {o.window_start.slice(0, 5)}–{o.window_end.slice(0, 5)}{" "}
@@ -507,6 +513,22 @@ export function PlanningBoard({ day = "2026-01-08" }: { day?: string }) {
                     />
                   </div>
                   <RoadMap
+                    points={metric.stops.flatMap((s) => {
+                      const o = context?.orders.find((o) => o.id === s.orderId);
+                      return o && o.longitude != null && o.latitude != null
+                        ? [
+                            {
+                              id: o.id,
+                              label: o.outlet_name,
+                              longitude: Number(o.longitude),
+                              latitude: Number(o.latitude),
+                              kind: "checkpoint" as const,
+                              sequence: s.sequence,
+                              supplemental: o.supplemental,
+                            },
+                          ]
+                        : [];
+                    })}
                     geometry={metric.geometry}
                     label="Selected trip road route"
                   />
@@ -528,7 +550,7 @@ export function PlanningBoard({ day = "2026-01-08" }: { day?: string }) {
                       <div>
                         <strong>{o?.outlet_name}</strong>
                         <small>
-                          {o?.source_ref} · load position{" "}
+                          {o?.source_ref || o?.reference} · load position{" "}
                           {trip.stops.length - position}
                         </small>
                         <small>
@@ -677,10 +699,18 @@ export function PlanningBoard({ day = "2026-01-08" }: { day?: string }) {
                 onClick={() =>
                   void run(async () =>
                     m.setValidation(
-                      await api<Validation>("/planning/validate", {
-                        ...plan,
-                        trips: plan.trips.filter((t) => t.stops.length),
-                      }),
+                      await (async () => {
+                        const normalized = {
+                          ...plan,
+                          trips: plan.trips.filter((t) => t.stops.length),
+                        };
+                        m.setPlan(normalized);
+                        setActive(0);
+                        return api<Validation>(
+                          "/planning/validate",
+                          normalized,
+                        );
+                      })(),
                     ),
                   )
                 }
