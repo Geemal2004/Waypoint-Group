@@ -1,6 +1,6 @@
 # Deployment and recovery
 
-The local judge runs on loopback with explicit demo accounts. Production uses an isolated Compose project and volume. Public hosting and real mobile deployment remain unverified.
+The local judge runs on loopback with explicit demo accounts. The competition app is deployed over HTTPS on Lightsail; see [AWS deployment](aws-deployment.md). Production uses an isolated Compose project and volume. Production acceptance and physical mobile deployment remain unverified.
 
 The competition AWS rollout is tracked in [AWS deployment](aws-deployment.md). It preserves judge mode rather than using the production override, which disables demo seeding.
 

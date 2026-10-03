@@ -1,6 +1,6 @@
 # Submission preparation
 
-No public deployment or video has been created. Keep the repository name until the team supplies TeamName for TeamName_SolutionName. Confirm the final repository URL and obtain an approved host/domain before publishing.
+The competition deployment is **https://18-138-29-235.sslip.io**; HTTPS, source multi-stop workflow and three browser scenarios are verified. Private judge credentials are in ignored `data/private/lightsail-judge-access.txt`. The human-recorded video is pending. Keep the repository name until the team supplies TeamName for TeamName_SolutionName and confirms the final repository URL.
 
 Deployment uses the existing Compose services with migrations and persistent PostgreSQL. Use the isolated HTTPS override in [deployment instructions](deployment.md); restrict core/planning to the private network, set SESSION_SECURE=true, choose deployment-specific database credentials, and provision passwords appropriate for the judge environment. Back up the PostgreSQL volume including evidence. Do not place challenge CSVs or generated import SQL in a public repository, image, artifact or website. Confirm the competition's hosting/data rules before uploading private challenge reference data.
 

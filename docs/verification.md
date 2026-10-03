@@ -1,5 +1,15 @@
 # Verification
 
+Cloud competition checks on 4 October 2026:
+
+- Public **https://18-138-29-235.sslip.io** serves a trusted certificate; secure HttpOnly SameSite session cookies, no-store API and unauthenticated rejection pass (`tmp/lightsail-http-security.log`). Only HTTP/HTTPS edge ports are published.
+- All 31 approved payload files matched SHA-256. Corrected non-root permissions load 85 S1 orders and the supplied network. The cloud image build passed 13 Java unit tests and production TypeScript/Vite compilation.
+- Dataset API walkthrough passes against public HTTPS and real OSRM (`tmp/lightsail-dataset-walkthrough.log`): multi-stop geometry/timing/fuel, separate dry/chilled, van/mall access, excess deferral, competing/stale publication, approved shortage, reverse loading, four-role receipt and immutable proof/conflict recovery.
+- **All three cloud browser scenarios pass together in 2.0 minutes** (`tmp/lightsail-browser-walkthrough.log`). Untouched S1-013/S1-017 use VEH011; catalogue demand uses 8 October with linked 9 October rescheduling. Existing January/October history was preserved. Earlier failed runs exposed arrival-before-reload timing, stale order selection in a nonempty history and implicit Style detail navigation; the suite now waits for acknowledgement, captures each submit response and selects the submitted order explicitly. Earlier failures and the stopped wrong-target command are not counted as passing checks. Interrupted judge deliveries were completed with their original quantities/shortages/evidence (`tmp/lightsail-continuation.log`); no cloud reset was used.
+- Source-only cloud update succeeds with a pre-update backup, retained accounts/plans/evidence and healthy services (`tmp/lightsail-update.log`). Actual backup restoration passes in a disposable container with no external network/host ports: seven migrations, 85 S1 orders, 12,692 source records, 14 proof actions and zero orphaned stops (`tmp/lightsail-restore-check.log`). The verifier restores into a clean template0 database, avoiding the image's pre-created PostGIS schema collision.
+
+The deployed app is a competition environment; physical phone GPS/camera/background checks, certified geography/cold ranges, production acceptance, encrypted automated offsite backups and submission video/naming remain open. Local private files and verification artifacts stay outside Git. Cloud startup/update instructions are in [AWS deployment](aws-deployment.md).
+
 Product expansion checks on 3 October 2026:
 
 - **13 unit + 40 real PostgreSQL integration tests pass** on the final backend (`tmp/product-tests-final.log`). The ten added product integration cases cover scoped/versioned drafts, idempotent submission/commands, confirmation before allocation, amendment/cancellation evidence, linked rescheduling and skip lineage, monotonic scoped GPS/freshness/accuracy, durable issues, explicit administration/stale records, rollback import previews, session revocation and fresh OSRM arrival estimates/routing failure. Existing allocation constraints, concurrency, shortages, offline proof and trip ordering still pass.

@@ -20,7 +20,7 @@ Open **http://localhost:8080**. Flyway applies migrations and creates the four d
 | Loader | loader | WaypointDemo!2026 |
 | Driver | driver | WaypointDemo!2026 |
 
-These are synthetic judge accounts at Peliyagoda, with server-enforced scopes and BCrypt passwords. Default bindings are local only. The application has no public deployment yet.
+These are synthetic judge accounts at Peliyagoda, with server-enforced scopes and BCrypt passwords. Default bindings are local only. The competition deployment is **https://18-138-29-235.sslip.io**; its four usernames are the same, with a private competition password in ignored `data/private/lightsail-credentials.json`. The passwords above apply only to local development.
 
 ## Private challenge reference
 
@@ -86,7 +86,9 @@ With the stack running, `node tools/online-walkthrough.mjs` verifies HTTP securi
 
 ## Deployment and recovery
 
-See [deployment instructions](docs/deployment.md) for isolated HTTPS configuration, administrator provisioning, backup and disposable restore. Production disables judge seeding/simulation and requires private credentials, reviewed imports and certificates. Public hosting remains unverified.
+See [deployment instructions](docs/deployment.md) for isolated HTTPS configuration, administrator provisioning, backup and disposable restore. Production disables judge seeding/simulation and requires private credentials, reviewed imports and certificates. Production acceptance remains pending.
+
+The Lightsail competition server uses [its own deployment configuration](docs/aws-deployment.md), keeping labelled judge inputs and persistent cloud data. Continue development locally, commit a reviewed change, then run `./tools/deploy-lightsail.ps1 -Revision HEAD`. The update takes a database backup and preserves cloud accounts, plans, proof and certificate volumes. Private data and SSH keys stay outside Git; future source releases reuse the approved server imports.
 
 ## Design and submission
 
@@ -94,4 +96,4 @@ See [deployment instructions](docs/deployment.md) for isolated HTTPS configurati
 
 Allocation uses deterministic feasible insertion without claiming optimality. Explicit linked rescheduling works; automatic rolling rescheduling and ranked mall recovery remain pending. Published membership/vehicle reassignment remains restricted. Physical GPS/camera/background behavior, certified geography/cold ranges and traffic/truck routing require deployment validation. OSRM requires the prepared extract; enabling its profile alone does not prepare it.
 
-Public HTTPS hosting, team naming, repository URL confirmation and the human-recorded unlisted 5–8 minute video remain submission actions. Keep the existing repository name until TeamName is supplied. See [submission guide](docs/submission-guide.md).
+Competition HTTPS hosting is deployed. Team naming, repository URL confirmation and the human-recorded unlisted 5–8 minute video remain submission actions. Keep the existing repository name until TeamName is supplied. See [submission guide](docs/submission-guide.md).

@@ -1,10 +1,10 @@
 # AWS deployment
 
-The competition target is an Ubuntu 24.04 Lightsail instance at `18.138.29.235`, with 4 GB RAM, 2 vCPUs and 80 GB SSD. Docker and Compose are installed; SSH connectivity and free disk were inspected on 4 October 2026. The HTTPS hostname is `18-138-29-235.sslip.io` because no owned domain was supplied. The application rollout and public HTTPS checks remain pending.
+The competition app is deployed at **https://18-138-29-235.sslip.io** on the user's Ubuntu 24.04 Lightsail instance (`18.138.29.235`, 4 GB RAM, 2 vCPUs, 80 GB SSD). Ports 80/443 are reachable; the public certificate, secure sessions and dataset-backed workflow were verified on 4 October 2026. This is a judge environment with labelled supplemental geography/cold capabilities, not production-certified operations.
 
-On 4 October, the source archive checksum and Linux scripts were checked on the server; Spring, Python and the production frontend images built successfully. Caddy configuration validated on that host and its image digest is pinned. Private input/configuration transfer is pending explicit authorization after automatic approval review rejected that export. Public services have not been started. Logs: ignored `tmp/lightsail-build.log` and `tmp/lightsail-edge-validation.log`. A Windows archive line-ending problem was corrected using `.gitattributes`; incomplete task packages/downloads were removed after local disk exhaustion, preserving source data and the local database.
+The user explicitly approved private-data transfer. All 31 payload files matched SHA-256 checksums. Spring/Python/frontend images built on the host; 13 Java unit tests passed in that build. The dataset API walkthrough and all three browser scenarios pass over public HTTPS; the final browser run took 2.0 minutes. Secure HttpOnly SameSite cookies, no-store API responses and unauthenticated rejection pass. The initial import permission error was corrected for the non-root core group. Interrupted verification deliveries were completed with their quantities and prior evidence retained; no cloud reset was used. A source-only update preserved the database and generated a pre-update backup. Its isolated restore passed: seven migrations, 85 S1 orders, 12,692 source records, 14 proof actions and zero orphaned stops. Physical phone GPS/camera, production acceptance and automated encrypted offsite backups remain pending. Detailed logs stay ignored under `tmp/lightsail-*.log`.
 
-Preparation verified on 3 October 2026: both PowerShell scripts parse; the release archive was created and inspected (189 committed files, no `.env` or private data); missing CLI fails explicitly. AWS CLI is not installed or authenticated here. The official installer download timed out before completion; no unverified installer was executed. Cloud deployment and cloud smoke tests remain pending.
+The earlier 3 October preparation had no AWS access; the official CLI download timed out without running an unverified installer. This existing instance is deployed through the user-supplied SSH key, so AWS CLI authentication is not required for application updates. Use account preflight only for future AWS API provisioning.
 
 ## Lightsail competition release
 
@@ -19,7 +19,7 @@ Use the supplied private SSH key locally; never upload it. Server layout:
 - `/opt/waypoint/shared/backups`: private database dumps and hashes.
 - `/opt/waypoint/current`: the last successfully started release.
 
-The fixed Compose project is `waypoint-judge`; database and certificate volumes survive release changes. The first cloud database is a fresh judge installation, not a copy of local order history. Source datasets require explicit transfer authorization. Locally generated cloud credentials are kept in ignored `data/private/lightsail-credentials.json`.
+The fixed Compose project is `waypoint-judge`; database and certificate volumes survive release changes. The cloud database started as a fresh judge installation and now retains walkthrough plans/receipts/evidence. Local history was not imported or reset. Private cloud configuration remains in ignored `data/private/lightsail-credentials.json`. Share only `data/private/lightsail-judge-access.txt` with authorized judges; that sheet excludes the database password. The two source SQL imports have mode 640 for the non-root core group, their directory mode 750; cloud.env and account-rotation SQL stay mode 600 and are unreadable by core.
 
 After approved private inputs and a source release are installed:
 
@@ -27,16 +27,17 @@ After approved private inputs and a source release are installed:
 bash /opt/waypoint/releases/<commit>/deploy/lightsail/start-release.sh /opt/waypoint/releases/<commit>
 ```
 
-The script checks required inputs, locks against concurrent deployments, backs up an existing cloud database before migrations, builds services serially for the 4 GB host, starts internal services, replaces fresh public demo passwords through audited SQL, then starts HTTPS. Rotation changes only accounts still using the documented default password; later account changes survive redeployment. It records deployed image IDs/digests and advances `current` after startup. Container logs rotate at 10 MB with three files per service. Never invoke demo reset during a release.
+For subsequent reviewed commits, run `./tools/deploy-lightsail.ps1 -Revision HEAD` locally. It transfers source only. The server script checks required inputs, locks against concurrent deployments, backs up an existing cloud database before migrations, builds services serially, verifies non-root import access, starts internal services, replaces fresh default passwords through audited SQL, then starts HTTPS. Rotation changes only accounts still using the documented default password; later account changes survive. It checks OSRM and trusted HTTPS, records deployed image IDs/digests and advances `current` after startup. Container logs rotate at 10 MB with three files per service. Never invoke demo reset during a release.
 
 ```bash
 bash /opt/waypoint/current/deploy/lightsail/backup.sh
+bash /opt/waypoint/current/deploy/lightsail/verify-backup.sh /opt/waypoint/shared/backups/<dump-file>.dump
 cd /opt/waypoint/current
 docker compose -p waypoint-judge -f compose.yaml -f compose.lightsail.yaml --profile routing ps
 docker compose -p waypoint-judge -f compose.yaml -f compose.lightsail.yaml --profile routing logs --tail 100 core edge
 ```
 
-These backups are on the same host. Copy them to restricted encrypted off-host storage. Previous releases support code rollback, subject to migration compatibility. Preserve the database volume and take a backup before every update. This is a single competition server, with no high-availability claim.
+Restore verification uses a disposable labelled container, no external network/host ports and a separate clean database; it removes only that container and leaves the live database untouched. These backups are on the same host. Copy them to restricted encrypted off-host storage. Previous releases support code rollback, subject to migration compatibility. Preserve the database volume and take a backup before every update. This is a single competition server, with no high-availability claim.
 
 ## Prepare an immutable release
 

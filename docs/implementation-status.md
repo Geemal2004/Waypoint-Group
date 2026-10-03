@@ -1,6 +1,8 @@
-# Implementation status — 3 October 2026
+# Implementation status — 4 October 2026
 
 The dataset-backed multi-stop milestone is implemented and locally verified. The source API and browser walkthroughs and isolated reset pass. This is not the completed hackathon submission. ML integration remains deferred to the Datathon.
+
+The competition app is deployed over trusted HTTPS on Lightsail. Source API and all three browser scenarios pass against the cloud app; a source-only update preserved cloud history and its backup restored successfully in an isolated database. See [AWS deployment](aws-deployment.md). Production/physical-device acceptance and submission video/naming remain pending.
 
 | Requirement | Status | Evidence / remaining work |
 | --- | --- | --- |
@@ -32,7 +34,7 @@ The dataset-backed multi-stop milestone is implemented and locally verified. The
 | Planning tests | Tested | 12 tests covering multi-stop insertion, capacity/fuel deferrals, cold separation, windows, daily slots and rejected road matrices |
 | Four-role browser/offline walkthrough | Completed, tested | Source multi-stop browser scenario passed with both receipts, shortage, ordered handoffs, offline reload/conflict/recovery; original two browser scenarios also passed |
 | CI | Prepared | Web/core/planning/browser jobs; remote execution not claimed |
-| Public deployment/video/naming | Pending | Approved host/HTTPS URL, team name/repository URL and human-recorded unlisted 5–8 minute video |
+| Public deployment/video/naming | Host verified / Human submission pending | Lightsail HTTPS URL and cloud walkthroughs verified; team name/repository URL and human-recorded unlisted 5–8 minute video remain pending |
 
 See verification.md for executed checks and design-departures.md for scope/fidelity departures. Production outlet geolocation/certified cold capabilities, truck-specific/live-traffic routing, optimality, automatic rolling rescheduling and published membership/vehicle reassignment remain limitations.
 

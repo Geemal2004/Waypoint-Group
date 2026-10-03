@@ -17,12 +17,12 @@ Implemented means working code exists; Verified identifies executed acceptance e
 | Issues / authorized phone links | Verified messages / Implemented contacts | Durable scoped idempotent issues; optional provisioned telephone links, no invented voice/chat integration |
 | Draft/confirm/amend/cancel/reschedule | Verified API | Scoped versioned drafts/idempotent submission, review gate, amendment revalidation, cancellation audit, single linked replacement and skip lineage |
 | Operational administration | Verified API / Implemented UI | Explicit privilege, whitelisted/revisioned changes, active-assignment protection, audited provenance, rollback preview and atomic imports |
-| HTTPS configuration | Verified local proxy / Partial deployment | Validated Compose override, private local TLS smoke test and API headers; public certificate/domain and production acceptance pending |
-| Backup / restore | Verified local | Final V1–V7 dump restored to disposable isolated DB, no orphaned stops; offsite encrypted/automated backup pending |
+| HTTPS configuration | Verified competition deployment / Partial production | Lightsail public certificate, secure HttpOnly SameSite sessions, API no-store and four-role browser acceptance; production acceptance pending |
+| Backup / restore | Verified local and cloud | Actual cloud pre-update dump restored in a disposable isolated DB; V1–V7, source records and proof retained, zero orphaned stops; offsite encrypted/automated backup pending |
 | Session / evidence / concurrency | Verified | CSRF/scopes, session revocation, no-store evidence, immutable actions, stale/concurrent publication and retained conflict |
 | Retention | Implemented position policy / Partial records | Locations expire; server evidence/audit has no automatic purge; operational retention policy requires review |
 | Multi-role browser acceptance | Verified | Three final scenarios pass together, including amendment rollback/propagation, live issues, deferral/rescheduling, source offline recovery and account isolation |
 | Visual fidelity / mobile hardware | Partial | Required screen sizes captured/inspected locally; full human pixel-fidelity, real GPS/camera and background behavior pending |
-| Public host/video/team naming | Pending | No public deployment or human-recorded submission video |
+| Public host/video/team naming | Host verified / Video and naming pending | Competition HTTPS app deployed on Lightsail; human-recorded video, final team naming/repository URL remain submission work |
 
 Further limits: uncertified supplemental outlet geography/cold ranges; car-profile roads without live traffic; heuristic rather than optimal allocation; automatic rolling rescheduling and published membership/vehicle reassignment; receipt damage attachments, receiver signatures, barcode/price/invoice/customer integrations and fleet telemetry certification.
