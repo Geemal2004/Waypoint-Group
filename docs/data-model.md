@@ -1,6 +1,6 @@
 # Implemented data model
 
-Flyway V1–V5 run automatically. PostgreSQL constraints enforce identity, quantity bounds and relationships. Timestamps are UTC; operating dates/windows use Asia/Colombo. Device capture and server acceptance times remain separate.
+Flyway V1–V7 run automatically. PostgreSQL constraints enforce identity, quantity bounds and relationships. Timestamps are UTC; operating dates/windows use Asia/Colombo. Device capture and server acceptance times remain separate.
 
 | Table | Relationships and fields |
 | --- | --- |
@@ -35,4 +35,8 @@ Progression: RECEIVED → SCHEDULED → LOADING → RELEASED → IN_TRANSIT → 
 
 Expected receipt quantity derives from delivered, then loaded, then ordered. A known loading shortage does not itself become a new receiving discrepancy. Further delivery/receiving shortfalls require reasons.
 
-Source orders retain source_ref, scenario, exact aggregate kg/m³, days since service and previous-day skip flag. Source-unit product lines preserve aggregate quantities; they do not claim source SKU detail. Supplemental judge cold ranges and private road points carry explicit provenance. Trip starts atomically move every released handoff into transit; arrival respects earlier stops. Deferrals retain owner/reason/next day and source skip baseline. Published membership stays fixed; untouched stop order/timing may be revised. Planning jobs, live locations, receipt damage attachments and full deferred-order rescheduling remain future work.
+Source orders retain source_ref, scenario, exact aggregate kg/m³, days since service and previous-day skip flag. Source-unit product lines preserve aggregate quantities; they do not claim source SKU detail. Supplemental judge cold ranges and private road points carry explicit provenance. Trip starts atomically move every released handoff into transit; arrival respects earlier stops. Deferrals retain owner/reason/next day and source skip baseline. Published membership stays fixed; untouched stop order/timing may be revised. Planning jobs, receipt damage attachments and automatic rolling rescheduling remain future work.
+
+V6/V7 add readable WP references, confirmation/cancellation times and rescheduled_from links. order_drafts retain account/outlet/day/items/version and submission result. order_commands bind UUID/digest/result for confirmation, amendment, cancellation and rescheduling. issue_messages retain author/category/body/command/time. operational_audit records reviewed mutations without passwords. Accounts add optional phone and explicit administration/network permissions; operational entities and waypoints add revisions/provenance. catalog_enabled separates selectable reviewed SKUs from source aggregate units.
+
+CANCELLED is an audited state before allocation. Confirmation does not create a transport assignment. Linked replacements preserve source references and whole demand; deferral history/skip counts traverse lineage. Live positions are transient Redis records, not permanent journey history or proof. Delivery evidence remains durable PostgreSQL and account-scoped device outbox data.

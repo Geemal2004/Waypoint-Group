@@ -19,3 +19,13 @@ Order handoffs and conflict resolutions carry current expectedVersion; order cre
 Proof: JPEG/PNG up to 5 MiB and 20 megapixels, actual media type validated. Filenames do not determine storage paths. Evidence requires permitted account scope and is returned with no-store/nosniff headers.
 
 Legacy manager scope includes DEMO-FRESH/STYLE/TECH and excludes DEMO-OUTSIDE. Private S1 preparation explicitly adds its source outlets to that judge account. Source-driver identities remain disabled; the provisioned judge principal represents the source fleet. Source plans require private supplemental coordinates/cold declarations and actual local OSRM. Unprepared, unreachable or failed routes cannot publish.
+
+## Product API additions
+
+All mutations use the same session/CSRF contract. GET/POST `/drafts` and POST `/drafts/{id}/submit` implement account-scoped versioned drafts and idempotent submission. POST `/orders/{id}/commands` requires commandId, expectedVersion, operation and reviewed reason; operations are CONFIRM, AMEND, CANCEL and RESCHEDULE. Amendments include complete item quantities and date; linked rescheduling includes a later reviewed date. Fresh temperatures cannot be combined. Store amendments to an untouched published trip reroute/revalidate atomically; stale or infeasible requests cannot publish partial changes.
+
+GET `/orders/{id}/journey` returns scoped checkpoints/geometry and planned or fresh road-estimate states. POST `/location` carries orderId, vehicleId, longitude, latitude, accuracy, capturedAt and simulated. The assigned active driver is required. Invalid/future/expired positions fail; older captures cannot overwrite a newer one. Simulation requires enabled judge configuration and a judge account. GET `/live/network?day=...` requires dispatcher scope; all-network access is explicit. GET `/live/events?after=...` is an authenticated no-store SSE stream with scoped order events, administration revision and transient positions.
+
+GET/POST `/orders/{id}/messages` uses durable commandId/category/body and the existing order scopes. GET `/administration`, POST `/administration/{type}`, `/preview` and `/import` require explicit administration permission. Entity changes carry id, expectedRevision, fields and reason. Calendar and manager-outlet access have separate `/administration/calendar` and `/administration/scope` commands. Imports reject all rows if any row is invalid/stale; raw source records stay immutable.
+
+Conflict review uses current_version from `/sync-conflicts`, not a separately cached order list. Authoritative expected-version rejection still protects against changes after review. SSE triggers refresh/recovery; polling and Retry sync remain explicit fallbacks.

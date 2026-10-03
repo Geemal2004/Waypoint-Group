@@ -1,22 +1,28 @@
-# Product milestone capability checklist
+# Product capability checklist
 
-This checklist tracks the October 2026 product UI and operations expansion. A working screen alone does not establish a verified capability. Existing allocation, authentication, evidence and conflict checks remain required regressions.
+Implemented means working code exists; Verified identifies executed acceptance evidence. Partial and Pending identify remaining scope. Production acceptance is distinct from local judge verification. ML remains deferred to the Datathon; retailer examples do not imply verified integrations.
 
-| Capability | Status | Evidence / acceptance still required |
+| Capability | Status | Evidence / limits |
 | --- | --- | --- |
-| Figma foundations and dispatcher references | Verified reference access | Foundations 2116:28, orders 2091:23, planning 2292:45; real code and screenshots inspected |
-| Role navigation and polished planning | Pending | Implement shell, separate tasks, table/workspace/constraints; inspect 1440×900 against Figma |
-| Store themes, catalogue, details and history | Pending | Fresh/Style/Tech, 390×844, cutoff and separate temperature orders |
-| Loader active multi-stop manifest | Partial | Existing reverse sequence and per-order checks work; grouped task layout/sticky actions pending |
-| Driver journey/proof/sync screens | Partial | Durable proof/conflict APIs work; product navigation, preview and map pending |
-| Road routing and authoritative allocation | Verified existing | See verification.md for 43 Java, 11 Python and three browser scenarios |
-| Permission-based location reporting | Pending | Scoped ingestion, accuracy/capture/receipt times, stale/offline states and start/stop |
-| Entire-network map and live control | Pending | Both depots, 120 outlets, 60 vehicles; cluster existing coordinates, no invented telemetry |
-| Server-driven update channel | Pending | Authorized real updates and reconnect/last-known handling |
-| Issue messaging and authorized phone links | Pending | Persisted scoped messaging; phone availability and honest contact labels |
-| Draft/confirmation/amend/cancel/reschedule | Partial | Current submitted-to-receipt workflow; explicit new transitions and revalidation pending |
-| Operational administration | Pending | Authorized validated changes, provenance, import rejection and audit |
-| HTTPS, backup/restore and retention | Partial | Existing migrations/scopes/health/evidence; deployment configuration and tested restore pending |
-| Visual and functional acceptance | Pending | Before/after screenshots, dark mode, phone/tablet overflow and full regression suite |
+| Figma foundations / role navigation | Implemented | Inspected reference frames, local design assets/fonts, day/night tokens; separate operational tasks and selected day |
+| Dispatcher orders/planning | Verified | Source road multi-stop UI, both capacities, stop ordering, publication, shortage approval, same-stop recovery |
+| Fresh/Style/Tech store | Implemented | Branded catalogue, draft/review, separate temperature submissions, tracking/receipt/history; supplemental SKU provenance, no source prices |
+| Loader reverse multi-stop manifest | Verified | Shared stops, reverse loading, physical counts, hold/approval/release; phone sticky actions and tablet split |
+| Driver journey/proof/sync | Verified | Ordered journey, local photo preview, durable offline reload, conflicts/retry/account isolation; signatures pending |
+| Road routing / allocation authority | Verified | OSRM adapter; Python proposes, Spring independently validates; road failure/unreachable rejection; 53 Java and 12 Python checks |
+| Permission-based location | Verified server / Partial device | Scope, monotonic capture, accuracy/freshness, capture/receipt, 15-minute expiry; emulated-browser Start/Stop, denied/poor-accuracy/offline/reconnect checks pass; physical/background acceptance pending |
+| Full-network map / live control | Implemented | Two depots, all 120 source outlets/60 vehicles, configured coordinate clusters, run/reporting filters, trip details, missing positions explicit |
+| Current-day road arrival estimate | Verified | Fresh accurate location required, service/window risk, OSRM failure explicit; replay/future dates remain planned, no traffic/truck accuracy claim |
+| Server-driven updates | Implemented | Authenticated scoped SSE, reconnect/active-account checks, query invalidation and transient positions; 15-second network refresh fallback |
+| Issues / authorized phone links | Verified messages / Implemented contacts | Durable scoped idempotent issues; optional provisioned telephone links, no invented voice/chat integration |
+| Draft/confirm/amend/cancel/reschedule | Verified API | Scoped versioned drafts/idempotent submission, review gate, amendment revalidation, cancellation audit, single linked replacement and skip lineage |
+| Operational administration | Verified API / Implemented UI | Explicit privilege, whitelisted/revisioned changes, active-assignment protection, audited provenance, rollback preview and atomic imports |
+| HTTPS configuration | Verified local proxy / Partial deployment | Validated Compose override, private local TLS smoke test and API headers; public certificate/domain and production acceptance pending |
+| Backup / restore | Verified local | Final V1–V7 dump restored to disposable isolated DB, no orphaned stops; offsite encrypted/automated backup pending |
+| Session / evidence / concurrency | Verified | CSRF/scopes, session revocation, no-store evidence, immutable actions, stale/concurrent publication and retained conflict |
+| Retention | Implemented position policy / Partial records | Locations expire; server evidence/audit has no automatic purge; operational retention policy requires review |
+| Multi-role browser acceptance | Verified | Three final scenarios pass together, including amendment rollback/propagation, live issues, deferral/rescheduling, source offline recovery and account isolation |
+| Visual fidelity / mobile hardware | Partial | Required screen sizes captured/inspected locally; full human pixel-fidelity, real GPS/camera and background behavior pending |
+| Public host/video/team naming | Pending | No public deployment or human-recorded submission video |
 
-ML remains deferred. Grocery, fashion and electronics retailer names in the request are illustrative examples, with no customer/integration claim. Production readiness remains unverified until deployment, physical devices, geography and certified cold capabilities are established.
+Further limits: uncertified supplemental outlet geography/cold ranges; car-profile roads without live traffic; heuristic rather than optimal allocation; automatic rolling rescheduling and published membership/vehicle reassignment; receipt damage attachments, receiver signatures, barcode/price/invoice/customer integrations and fleet telemetry certification.

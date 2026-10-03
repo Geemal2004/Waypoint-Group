@@ -14,7 +14,7 @@ flowchart TD
   Workflow --> DB
   Sync --> DB
   Seed[Private validated import / synthetic fixtures] --> Core
-  Core -->|Health connectivity| Redis[(Redis)]
+  Core -->|Transient positions / 15-minute expiry| Redis[(Redis)]
   Core -->|Road routes and matrices| OSRM[Local OSRM adapter]
   Core -->|Operational inputs and road matrix| Python[FastAPI assisted allocation]
   Python -->|Untrusted proposal| Validator
@@ -30,6 +30,16 @@ Workbox caches application assets, never authenticated API responses. Dexie cach
 
 Python proposes deterministic whole-order insertions using Spring's OSRM matrix. It cannot write orders, publish plans or bypass Spring's fresh road calculation and constraints. Publication locks the depot/day revision, vehicles, existing manifests and orders; checks plan/order versions; and writes revision, trips, ordered stops, runs and deferrals atomically. Database uniqueness prevents double assignment. Immutable revisions retain request, road geometry and schedules. Reordering preserves run/stop/order IDs and is limited to untouched scheduled manifests.
 
-OSRM errors block publication. The adapter requires road seconds/metres and GeoJSON, rejects unreachable/null/fallback cells and large snaps, and never substitutes straight-line metrics. Weekly fuel counts each parent trip once. Road travel/wait/service/return is separate from the booklet's outbound/inter-stop/service budget. ML and live location ingestion remain deferred; Kafka is absent.
+OSRM errors block publication. The adapter requires road seconds/metres and GeoJSON, rejects unreachable/null/fallback cells and large snaps, and never substitutes straight-line metrics. Weekly fuel counts each parent trip once. Road travel/wait/service/return is separate from the booklet's outbound/inter-stop/service budget. ML remains deferred; Kafka is absent.
 
 Compose starts with migrations and legacy fixtures. Private network/S1 imports are read-only mounts and stay out of images. The network import is digest guarded; idempotent S1 seeding restores missing judge orders after an explicit reset. OSRM uses the routing profile and a loopback debugging port; web/core/planning also bind loopback. DB/Redis remain internal. Public HTTPS deployment remains a submission action.
+
+## Product commands and live operations
+
+Account-scoped drafts are separate from submitted orders. Immutable command UUIDs bind the author, expected order version and payload digest. Submitted catalogue orders require dispatcher confirmation. Cancellation preserves lines/audit. Published amendments lock the vehicle/day/trip and rerun the Spring road validator; failure rolls back the quantities and plan revision. Rescheduling copies whole demand into one linked replacement while retaining the original evidence, decision and skip lineage.
+
+Authenticated same-origin SSE emits scoped order updates and transient positions every two seconds, with short streams, reconnect and active-account checks on every tick. Events invalidate authoritative queries, never authorize mutations. Administration revisions invalidate dispatcher data. nginx disables buffering. Durable scoped issues use idempotent command IDs; contact numbers are optional authorized account fields.
+
+Location reporting is restricted to the assigned active driver/vehicle. Redis retains the latest monotonic capture for 15 minutes, its receipt time, accuracy and simulation marker. Reports are stale after 90 seconds; accuracy over 100 metres is poor. Fresh accurate current-day positions can request OSRM arrival estimates. Replay/future days retain planned times; absent positions and routing failure produce explicit states. The bounded foreground session/account queue is independent of durable proof.
+
+Explicit administration permissions protect whitelisted fields, provenance, revision checks, active assignments and audit. Import previews roll back each transaction; accepted batches are atomic and revalidated under locks. Account disablement revokes the next request and stream tick. Production uses separate volumes, disabled judge seeding/simulation, secure cookies and TLS.

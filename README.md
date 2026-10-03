@@ -1,6 +1,6 @@
 # Waypoint Group
 
-Waypoint connects four authenticated roles to PostgreSQL operations, with dataset-backed multi-stop planning, local OSRM road routes, Spring validation, versioned publication, approved shortages, driver proof and distinct store receipts. Python proposes whole-order allocations; Spring checks every constraint again before publishing. Driver proof survives offline reload and same-stop conflict review. ML remains deferred to the Datathon. See [implementation status](docs/implementation-status.md).
+Waypoint connects four authenticated roles to PostgreSQL operations, with dataset-backed multi-stop planning, local OSRM road routes, Spring validation, versioned publication, approved shortages, driver proof and distinct store receipts. Python proposes whole-order allocations; Spring checks every constraint again before publishing. Driver proof survives offline reload and same-stop conflict review. ML remains deferred to the Datathon. See [capability status](docs/product-capabilities.md) and [implementation status](docs/implementation-status.md).
 
 ## Start locally
 
@@ -40,7 +40,7 @@ S1 is undated. Its consistent planning simulation date is **8 January 2026**, a 
 
 ## Judge walkthrough
 
-1. Dispatcher: open **Dataset multi-stop planning**, day `2026-01-08`, and choose **Propose judge scenario** on fresh/reset state. This selects the multi-stop Fresh dry, separate chilled, mall and excess-demand cases. The queue shows source orders, kg/m³, unloading/windows and skip history. You can also select other compatible orders or propose all demand. Review actual road timing, both capacity bars, fuel litres, violations and deferred reasons before publishing.
+1. Dispatcher: open **Planning**, day `2026-01-08`, and choose **Propose judge scenario** on fresh/reset state. This selects the multi-stop Fresh dry, separate chilled, mall and excess-demand cases. The queue shows source orders, kg/m³, unloading/windows and skip history. You can also select other compatible orders or propose all demand. Review actual road timing, both capacity bars, fuel litres, violations and deferred reasons before publishing.
 2. For a focused reproducible scenario, `node tools/dataset-walkthrough.mjs` publishes two feasible multi-stop trips plus a separate chilled trip, including the same Fresh outlet's dry/chilled orders, van-only access, a fixed mall window and a genuine excess-volume deferral. It also checks competing/stale publication and completes the dry trip through all four roles, with shortage and retained-proof recovery. Run after the explicit judge reset; it deliberately rejects already-used scenario state.
 3. Loader: select a source assignment. Follow the displayed reverse loading sequence; count every stop, record a shortage if necessary, obtain dispatcher approval and release every stop. Driver departure is held until the complete trip is released.
 4. Driver: acknowledge the trip once, then follow the published stop sequence. Arrive, capture a JPEG/PNG and save proof. Store manager confirms actual received quantities separately. A known approved shortage remains part of that order.
@@ -49,19 +49,21 @@ S1 is undated. Its consistent planning simulation date is **8 January 2026**, a 
 
 OSRM failure blocks proposals and publication with `ROUTING_UNAVAILABLE`; unreachable roads return `ROUTING_UNREACHABLE`. Repair the mapping/service and retry. There is no straight-line fallback. OSRM uses its car road profile, without live traffic, truck height/weight restrictions or certified cold-chain telemetry.
 
-## Legacy workflow regression
+## Product workflow
 
-Use separate browser profiles for each account. At phone size use approximately 390 px for loader and driver.
+Use separate profiles for all four accounts. Select the same **Operating day** in every role; active work uses that date, while History retains earlier records.
 
-1. Manager: select Demo Fresh, New order, an unused October operating date, Ambient, and 10 rice cartons. Review and place. The server applies the 16:00 Colombo cutoff and explains any date change.
-2. Dispatcher: select that order, choose Demo Dry truck, declare a 05:30–07:30 Colombo reservation, 10 L, trip 1, and a reason. Publish the assigned load. Both capacities, cold compatibility, access, weekly fuel and trip reservations are checked server-side. These times do not claim a road ETA.
-3. Loader: select the assignment, count 8 of 10, choose Missing stock, and acknowledge/save. Release is held. Dispatcher approves the partial release with a reason; loader then releases it.
-4. Driver: acknowledge the released plan/start, confirm arrival while safely stopped, select a real JPEG/PNG photo, and save proof. The screen distinguishes local save from server acceptance.
-5. Manager: open the delivered order, view proof and confirm 8 received. Ordered 10, loaded 8, delivered 8 and received 8 remain distinct. The two known missing cartons do not become a new receiving discrepancy.
-6. Offline branch: prepare a second assignment using Demo Van on that date. Start/arrive while online, reload once online so the PWA controls the page, disconnect and reload. Save a photo. “Saved on device · pending sync” survives another reload. Dispatcher defers **that same stop** with a reason/next day. Reconnect the driver. Both records are preserved for review; dispatcher views evidence and accepts verified delivery or keeps the server decision. Acceptance creates a receipt task and retains deferral history.
-7. Tech branch: place a television order, complete its handoffs, and record Damaged packaging or Damaged product at receipt. The issue is persisted separately from driver proof. Receipt-specific photo capture is pending.
+1. Store: select an authorized outlet and open New order. Count selectable catalogue units in separate Dry/Chilled/Frozen orders, save/resume a draft, then review and submit. Fresh, Style and Tech have distinct surfaces and receiving guidance. Judge SKUs are explicitly supplemental; source files supply aggregate demand rather than retail SKU details or prices.
+2. Dispatcher: review submissions in Orders and confirm quantities. Planning offers confirmed orders for assisted or manual multi-stop allocation. Review both capacities, access, road timing, windows, fuel and failures before publication. The source judge scenario uses the January replay; new catalogue orders use reviewed October dates.
+3. Loader: select the assigned load for that day, follow reverse delivery order, count physical units and record shortages. Dispatch approves partial release through Orders. Release every stop before departure.
+4. Driver: Journey shows ordered checkpoints, actual road geometry and released quantities. Start the trip once, follow stop order, arrive while safely stopped, then count/preview/save a JPEG/PNG in Stop proof. Sync distinguishes local save, acceptance, rejection and conflict. Evidence survives offline reload and remains account scoped after sign-out.
+5. Store: track the delivery and confirm received quantities separately. Approved shortages remain visible. Tech receiving issues persist; receipt-specific damage attachments and signatures remain pending.
+6. Store amendments before loading independently recalculate the whole published trip and publish a new revision only if feasible. Cancellation is available before allocation. Dispatch records whole-order deferral and explicitly creates one linked replacement on a later reviewed date. Original demand, evidence and consecutive skip history remain intact.
+7. Location sharing requires permission and explicit Start/Stop. Capture/receipt times, accuracy, denied permission, poor accuracy, stale and offline states are visible. A foreground queue keeps only the latest position for up to 15 minutes; background tracking is not promised. The separately labelled judge simulator never claims physical GPS or confirms arrival.
+8. Dispatcher Live network/Fleet includes both depots, 120 source outlets and 60 vehicles. Maps cluster configured coordinates and show vehicles only with accepted reports. Current-day arrival estimates require fresh accurate location and OSRM; replay times remain planned. Durable scoped issues arrive through server updates. Phone links appear only for authorized provisioned numbers.
+9. Administration requires an explicit permission. Catalogue, outlets, fleet/drivers/accounts, windows, cold capabilities, waypoints and dates use reviewed reasons, provenance, revision checks and audit. Active assignments protect constraints. JSON imports preview every row and apply atomically after validation. Raw source records are preserved.
 
-A used vehicle/date may already have reservations; choose another date or the explicit reset below. Style uses Mondays only in legacy DEMO fixtures; source Style orders use source operating days. Comparing alternative mall recovery plans remains future work.
+Legacy one-stop reservation APIs remain limited to isolated DEMO regression fixtures and are absent from product planning. ML remains deferred; Kafka is absent.
 
 ## Explicit demo reset
 
@@ -80,12 +82,16 @@ React/TypeScript/Vite, Tailwind, shadcn-style Button/CVA, TanStack Query, Workbo
 
 Frontend: `cd apps/web; npm ci; npm run dev` proxies `/api` to port 8081. Backend: Java 21/Maven, `cd services/core; mvn verify -Pintegration` uses disposable Testcontainers PostgreSQL (Docker required). Planning: Python 3.12, install requirements then `python -m pytest`.
 
-With the stack running, `node tools/online-walkthrough.mjs` verifies HTTP security/handoffs/replay/recovery using legacy fixtures. `cd apps/web; npx playwright install chromium; npm run test:e2e` exercises source multi-stop planning, four-role UI, phone layouts and offline reload, plus two legacy regressions. The source browser scenario requires fresh/reset S1 state and explicitly skips if private inputs are absent; the legacy scenarios create synthetic regression orders. Use `WAYPOINT_URL` for a different local endpoint. See [verification](docs/verification.md) for actual results, [architecture](docs/architecture.md), [schema](docs/data-model.md), and [API walkthrough](docs/api-walkthrough.md).
+With the stack running, `node tools/online-walkthrough.mjs` verifies HTTP security/handoffs/replay/recovery using legacy fixtures. `cd apps/web; npx playwright install chromium; npm run test:e2e` exercises source multi-stop planning, four-role UI, phone layouts and offline reload, plus lifecycle/rescheduling and receipt/account-isolation regression coverage. The source browser scenario requires fresh/reset S1 state and explicitly skips if private inputs are absent; the legacy scenarios create synthetic regression orders. Use `WAYPOINT_URL` for a different local endpoint. After the dataset API walkthrough on an isolated judge project, `node tools/location-walkthrough.mjs` exercises explicitly emulated browser permission/accuracy/offline location behavior and phone proof layout; it loads/starts the untouched Tech trip. See [verification](docs/verification.md) for actual results, [architecture](docs/architecture.md), [schema](docs/data-model.md), and [API walkthrough](docs/api-walkthrough.md).
+
+## Deployment and recovery
+
+See [deployment instructions](docs/deployment.md) for isolated HTTPS configuration, administrator provisioning, backup and disposable restore. Production disables judge seeding/simulation and requires private credentials, reviewed imports and certificates. Public hosting remains unverified.
 
 ## Design and submission
 
 [Figma reference](https://www.figma.com/design/gWapWGfw3V1dhKLlMKSwxG/Waypoint_Designathon--Copy-?node-id=2303-146). Role screens/tokens/rationales were inspected through the connected Figma account. The interface uses the submitted DM Sans typography, brand identity, day/night tokens and product/quantity handoffs, with a phone loader adaptation. Significant scope and fidelity departures are recorded in [design departures](docs/design-departures.md).
 
-Allocation uses deterministic feasible insertion, without claiming optimality. Deferred orders retain a next-day commitment; later replacement orders remain manual. Published manifest membership/vehicle changes, map rendering, live GPS, forecasting and alternative mall recovery comparisons remain future work. OSRM requires the prepared extract; enabling its profile alone does not prepare it.
+Allocation uses deterministic feasible insertion without claiming optimality. Explicit linked rescheduling works; automatic rolling rescheduling and ranked mall recovery remain pending. Published membership/vehicle reassignment remains restricted. Physical GPS/camera/background behavior, certified geography/cold ranges and traffic/truck routing require deployment validation. OSRM requires the prepared extract; enabling its profile alone does not prepare it.
 
 Public HTTPS hosting, team naming, repository URL confirmation and the human-recorded unlisted 5–8 minute video remain submission actions. Keep the existing repository name until TeamName is supplied. See [submission guide](docs/submission-guide.md).
