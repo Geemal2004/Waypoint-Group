@@ -15,6 +15,7 @@ export interface Outlet {
   access: string;
 }
 export interface Product {
+  demo: boolean;
   id: string;
   name: string;
   brand_code: string;
@@ -34,6 +35,11 @@ export interface Line extends Product {
   expected_receiving: number;
 }
 export interface Run {
+  route_trip_id?: string | null;
+  stop_id?: string;
+  stop_sequence?: number;
+  loading_sequence?: number;
+  plan_id?: string;
   vehicle_id: string;
   vehicle_name: string;
   driver_name: string;
@@ -47,6 +53,16 @@ export interface Run {
   partial_reason: string | null;
 }
 export interface Order {
+  source_ref?: string;
+  tripStops?: {
+    stop_id: string;
+    order_id: string;
+    sequence: number;
+    loading_sequence: number;
+    outlet_id: string;
+    status: string;
+    plan_version: number;
+  }[];
   id: string;
   outlet_id: string;
   outlet_name: string;

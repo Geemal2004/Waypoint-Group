@@ -13,6 +13,7 @@ import { api } from "../lib/api";
 import type { Account, Catalog, Order, Vehicle, Conflict } from "../lib/models";
 import { offlineDb, type OutboxAction } from "../lib/offline-db";
 import { saveProof, syncProofs } from "../lib/sync";
+import { PlanningBoard } from "./planning";
 
 export const statusLabel = (value: string) =>
   ({
@@ -28,6 +29,42 @@ export const statusLabel = (value: string) =>
   })[value] || value;
 export const brandLabel = (value: string) =>
   ({ FRESH: "Fresh", STYLE: "Style", TECH: "Tech" })[value] || value;
+function TripManifest({
+  order,
+  loading = false,
+}: {
+  order: Order;
+  loading?: boolean;
+}) {
+  if (!order.run?.route_trip_id) return null;
+  const stops = [...(order.tripStops || [])].sort((a, b) =>
+    loading ? a.loading_sequence - b.loading_sequence : a.sequence - b.sequence,
+  );
+  return (
+    <div className="notice info">
+      <p>
+        Trip {order.run.route_trip_id} · plan {order.run.plan_id} v
+        {order.run.plan_version}
+      </p>
+      <p>
+        {loading
+          ? "Load in reverse delivery order"
+          : "Follow the published stop order"}
+      </p>
+      <ol>
+        {stops.map((s) => (
+          <li key={s.stop_id}>
+            {s.outlet_id} · stop {s.sequence} · load {s.loading_sequence} ·{" "}
+            {statusLabel(s.status)} ·{" "}
+            {s.order_id === order.id
+              ? "selected order"
+              : "order " + s.order_id.slice(0, 8)}
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
+}
 export function Panel({
   children,
   className = "",
@@ -126,7 +163,10 @@ export function OrderChooser({
   onSelect: (id: string) => void;
 }) {
   return (
-    <div className="order-list">
+    <div
+      className="order-list"
+      style={{ maxHeight: "70vh", overflowY: "auto", padding: 4 }}
+    >
       {orders.map((o) => (
         <button
           key={o.id}
@@ -140,7 +180,11 @@ export function OrderChooser({
           <span>
             <strong>{o.outlet_name}</strong>
             <small>
-              {o.day} · {o.temperature.toLowerCase()} · {o.id.slice(0, 8)}
+              {o.day} · {o.temperature.toLowerCase()} ·{" "}
+              {o.source_ref || o.id.slice(0, 8)}
+              {o.run?.stop_sequence
+                ? ` · stop ${o.run.stop_sequence} / load ${o.run.loading_sequence}`
+                : ""}
             </small>
           </span>
           <span className={"badge status-" + o.status}>
@@ -179,7 +223,10 @@ export function Manager({
   const [selected, setSelected] = useState("");
   const outlet = catalog.outlets.find((o) => o.id === outletId);
   const products = catalog.products.filter(
-    (p) => p.brand_code === outlet?.brand_code && p.temperature === temperature,
+    (p) =>
+      p.demo &&
+      p.brand_code === outlet?.brand_code &&
+      p.temperature === temperature,
   );
   const items = products.filter((p) => (counts[p.id] || 0) > 0);
   const visible = orders.filter((o) => o.outlet_id === outletId);
@@ -204,9 +251,11 @@ export function Manager({
       <label>
         Outlet
         <select
+          aria-label="Outlet"
           value={outletId}
           onChange={(e) => {
             setOutlet(e.target.value);
+            setTab("orders");
             setTemperature("AMBIENT");
             setCounts({});
             setSelected("");
@@ -229,6 +278,7 @@ export function Manager({
         </Button>
         <Button
           variant={tab === "new" ? "default" : "outline"}
+          disabled={!outlet?.demo}
           onClick={() => {
             setTab("new");
             setReview(false);
@@ -237,6 +287,12 @@ export function Manager({
           New order
         </Button>
       </div>
+      {!outlet?.demo && (
+        <Notice>
+          Source scenario orders are already submitted. Select a delivery to
+          review its plan, proof and receipt.
+        </Notice>
+      )}
       {tab === "new" ? (
         <>
           <Notice>
@@ -531,6 +587,7 @@ export function Dispatcher({
           </Panel>
         ))}
       </div>
+      <PlanningBoard />
       <div className="planning-grid">
         <Panel>
           <h2>Order queue</h2>
@@ -574,7 +631,7 @@ export function Dispatcher({
                   </p>
                 ))}
               </Panel>
-              {order.status === "RECEIVED" && (
+              {order.status === "RECEIVED" && order.demo && (
                 <Panel>
                   <h2>Candidate vehicle</h2>
                   <label>
@@ -741,7 +798,9 @@ export function Dispatcher({
                     >
                       <option value="">Choose operating day</option>
                       {catalog.operatingDays
-                        .filter((d) => d.demo && d.day > order.day)
+                        .filter(
+                          (d) => d.demo === order.demo && d.day > order.day,
+                        )
                         .map((d) => (
                           <option key={d.day}>{d.day}</option>
                         ))}
@@ -953,6 +1012,7 @@ function LoadingForm({
           <h2>
             {order.run?.vehicle_name} · plan v{order.run?.plan_version}
           </h2>
+          <TripManifest order={order} loading />
           <p>
             {order.temperature.toLowerCase()} · {order.outlet_name}
           </p>
@@ -1128,6 +1188,7 @@ export function Driver({
               {order.run?.vehicle_name} · {order.temperature.toLowerCase()} ·
               plan v{order.run?.plan_version}
             </p>
+            <TripManifest order={order} />
             <p>
               Receiving window {order.window_start.slice(0, 5)}–
               {order.window_end.slice(0, 5)}

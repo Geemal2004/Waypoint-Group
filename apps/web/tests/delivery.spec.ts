@@ -44,6 +44,212 @@ async function noOverflow(page: Page) {
     ),
   ).toBeTruthy();
 }
+
+test("dataset multi-stop planning and durable offline proof across four roles", async ({
+  browser,
+}) => {
+  test.setTimeout(300000);
+  const contexts = await Promise.all(
+    [1600, 1600, 390, 390].map((width) =>
+      browser.newContext({ viewport: { width, height: 900 } }),
+    ),
+  );
+  const [manager, dispatcher, loader, driver] = await Promise.all(
+    contexts.map((c) => c.newPage()),
+  );
+  for (const [page, name] of [
+    [manager, "manager"],
+    [dispatcher, "dispatcher"],
+    [loader, "loader"],
+    [driver, "driver"],
+  ] as const)
+    await login(page, name);
+  const context = await call(dispatcher, "/planning?day=2026-01-08");
+  const first = context.orders.find(
+      (o: { source_ref: string }) => o.source_ref === "S1-008",
+    ),
+    second = context.orders.find(
+      (o: { source_ref: string }) => o.source_ref === "S1-006",
+    );
+  if (!first || !second) {
+    for (const c of contexts) await c.close();
+    test.skip(
+      true,
+      "Private S1 dataset and local OSRM are required; run the private judge preparation.",
+    );
+    return;
+  }
+  expect(first.status).toBe("RECEIVED");
+  expect(second.status).toBe("RECEIVED");
+  const board = dispatcher.getByRole("region", {
+    name: "Dataset multi-stop planning",
+  });
+  await board.getByLabel("Select S1-008", { exact: true }).check();
+  await board.getByLabel("Select S1-006", { exact: true }).check();
+  await board
+    .getByRole("button", { name: "Assign selected manually", exact: true })
+    .click();
+  await board.getByLabel("Vehicle", { exact: true }).selectOption("VEH008");
+  await board
+    .getByRole("button", { name: "Validate road routes", exact: true })
+    .click();
+  await expect(
+    board.getByRole("button", { name: "Publish validated plan", exact: true }),
+  ).toBeEnabled();
+  await expect(
+    board.getByLabel("Weight capacity", { exact: true }),
+  ).toBeVisible();
+  await board
+    .getByRole("button", { name: "Publish validated plan", exact: true })
+    .click();
+  await expect(
+    board.getByRole("button", { name: "Publish validated plan", exact: true }),
+  ).toHaveCount(0);
+  for (const [source, index] of [
+    [first, 0],
+    [second, 1],
+  ] as const) {
+    let order = await call(loader, `/orders/${source.id}`);
+    const line = order.lines[0];
+    order = await call(loader, `/orders/${source.id}/loading`, {
+      expectedVersion: order.version,
+      lines: [
+        { lineId: line.id, quantity: line.ordered - (index === 0 ? 1 : 0) },
+      ],
+      reason: index === 0 ? "SHORTAGE" : "NONE",
+    });
+    if (index === 0)
+      order = await call(dispatcher, `/orders/${source.id}/approve-partial`, {
+        expectedVersion: order.version,
+        reason:
+          "One source unit missing; keep the shortage in this multi-stop manifest.",
+      });
+    await call(loader, `/orders/${source.id}/release`, {
+      expectedVersion: order.version,
+    });
+  }
+  async function choose(page: Page, ref: string) {
+    await page.getByRole("button").filter({ hasText: ref }).click();
+  }
+  await choose(loader, "S1-008");
+  await expect(
+    loader.getByText("Load in reverse delivery order", { exact: true }),
+  ).toBeVisible();
+  await noOverflow(loader);
+  await choose(driver, "S1-008");
+  await driver
+    .getByRole("button", {
+      name: "Acknowledge plan & start journey",
+      exact: true,
+    })
+    .click();
+  await driver
+    .getByRole("button", {
+      name: "Confirm arrival · safely stopped",
+      exact: true,
+    })
+    .click();
+  await driver.getByLabel("Delivery photo", { exact: true }).setInputFiles({
+    name: "source-online.png",
+    mimeType: "image/png",
+    buffer: png,
+  });
+  await driver
+    .getByRole("button", { name: "Save proof on this device", exact: true })
+    .click();
+  await expect(
+    driver.getByText(`${first.id.slice(0, 8)} · Accepted by server`, {
+      exact: true,
+    }),
+  ).toBeVisible();
+  await manager
+    .getByLabel("Outlet", { exact: true })
+    .selectOption(first.outlet_id);
+  await choose(manager, "S1-008");
+  await manager
+    .getByRole("button", { name: "Confirm received", exact: true })
+    .click();
+  await expect(
+    manager.getByRole("button").filter({ hasText: "S1-008" }),
+  ).toContainText("Receipt confirmed");
+  const received = await call(manager, `/orders/${first.id}`);
+  expect(received.lines[0].received).toBe(received.lines[0].ordered - 1);
+  await choose(driver, "S1-006");
+  await driver
+    .getByRole("button", {
+      name: "Confirm arrival · safely stopped",
+      exact: true,
+    })
+    .click();
+  await driver.evaluate(async () => {
+    await navigator.serviceWorker.ready;
+  });
+  await driver.reload();
+  await choose(driver, "S1-006");
+  await contexts[3].setOffline(true);
+  await driver.reload();
+  await choose(driver, "S1-006");
+  await driver.getByLabel("Delivery photo", { exact: true }).setInputFiles({
+    name: "source-offline.png",
+    mimeType: "image/png",
+    buffer: png,
+  });
+  await driver
+    .getByRole("button", { name: "Save proof on this device", exact: true })
+    .click();
+  await driver.reload();
+  await expect(
+    driver.getByText(
+      `${second.id.slice(0, 8)} · Saved on device · pending sync`,
+      { exact: true },
+    ),
+  ).toBeVisible();
+  await noOverflow(driver);
+  const current = await call(dispatcher, `/orders/${second.id}`);
+  await call(dispatcher, `/orders/${second.id}/defer`, {
+    expectedVersion: current.version,
+    nextDay: "2026-01-09",
+    reason:
+      "Same source stop deferred while its proof was offline; keep evidence.",
+  });
+  await contexts[3].setOffline(false);
+  await expect(
+    driver.getByText(`${second.id.slice(0, 8)} · Conflict needs review`, {
+      exact: true,
+    }),
+  ).toBeVisible();
+  await dispatcher
+    .getByLabel("Resolution reason")
+    .fill(
+      "Verified retained source-stop proof; retain the deferral history and recover delivery.",
+    );
+  await dispatcher
+    .getByRole("button", { name: "Accept verified delivery", exact: true })
+    .click();
+  await expect(
+    driver.getByText(`${second.id.slice(0, 8)} · Accepted by server`, {
+      exact: true,
+    }),
+  ).toBeVisible();
+  await manager
+    .getByLabel("Outlet", { exact: true })
+    .selectOption(second.outlet_id);
+  await choose(manager, "S1-006");
+  await manager
+    .getByRole("button", { name: "Confirm received", exact: true })
+    .click();
+  await expect(
+    manager.getByRole("button").filter({ hasText: "S1-006" }),
+  ).toContainText("Receipt confirmed");
+  expect((await call(manager, `/orders/${second.id}`)).deferrals).toHaveLength(
+    1,
+  );
+  await dispatcher.screenshot({
+    path: "../../tmp/browser-results/dataset-planning.png",
+    fullPage: true,
+  });
+  await Promise.all(contexts.map((c) => c.close()));
+});
 test("four role browser handoff, partial load, offline reload, same-stop conflict and recovery", async ({
   browser,
 }) => {
@@ -269,6 +475,9 @@ test("four role browser handoff, partial load, offline reload, same-stop conflic
     fullPage: true,
   });
   await select(dispatcher, o.id);
+  await expect(
+    dispatcher.getByRole("button").filter({ hasText: o.id.slice(0, 8) }),
+  ).toContainText("Arrived");
   await dispatcher
     .getByLabel("Reason", { exact: true })
     .fill(

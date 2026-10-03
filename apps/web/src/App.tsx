@@ -306,8 +306,8 @@ export function App() {
         </header>
         <main className="page-content">
           <div className="demo-strip">
-            Synthetic judge environment · October 2026 · challenge reference
-            kept private
+            Judge environment · S1 replay: 8 January 2026 · legacy October
+            fixtures · private challenge data
           </div>
           {!online && (
             <Notice tone="warning">
