@@ -9,6 +9,11 @@ import {
   PackageCheck,
   Store,
   WifiOff,
+  Route,
+  Radio,
+  Clock3,
+  Settings2,
+  Info,
 } from "lucide-react";
 import { api, ApiError, refreshCsrf } from "./lib/api";
 import {
@@ -35,6 +40,11 @@ export function App() {
     [online, setOnline] = useState(navigator.onLine),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
+    [screen, setScreen] = useState("planning"),
+    [operatingDay, setOperatingDay] = useState(
+      localStorage.getItem("waypoint-operating-day") || "2026-01-08",
+    ),
+    [demoInformation, setDemoInformation] = useState(false),
     [night, setNight] = useState(
       localStorage.getItem("waypoint-theme") === "night",
     );
@@ -248,14 +258,30 @@ export function App() {
             <br />
             <span>GROUP OPS</span>
           </div>
-          <div className="nav-item active">
-            <ClipboardList size={18} />
-            Planning & handoffs
-          </div>
-          <p className="sidebar-note">
-            Road-backed plans and ordered handoffs. Forecasting is deferred to
-            the Datathon.
-          </p>
+          <nav aria-label="Operations navigation">
+            {[
+              ["orders", "Orders / cutoff", ClipboardList],
+              ["planning", "Planning", Route],
+              ["live", "Live control", Radio],
+              ["fleet", "Fleet overview", Truck],
+              ["deferrals", "Deferrals", Clock3],
+              ["administration", "Administration", Settings2],
+              ["history", "History", Clock3],
+            ].map(([key, label, ItemIcon]) => {
+              const NavIcon = ItemIcon as typeof Route;
+              return (
+                <button
+                  key={String(key)}
+                  className={`nav-item ${screen === key ? "active" : ""}`}
+                  aria-current={screen === key ? "page" : undefined}
+                  onClick={() => setScreen(String(key))}
+                >
+                  <NavIcon size={17} />
+                  {String(label)}
+                </button>
+              );
+            })}
+          </nav>
           <div className="sidebar-account">
             <img src={avatar} alt="" />
             <span>
@@ -278,6 +304,13 @@ export function App() {
             </span>
           </div>
           <div className="header-actions">
+            <button
+              className="demo-indicator"
+              onClick={() => setDemoInformation(true)}
+            >
+              <Info size={14} />
+              Demo
+            </button>
             <span className={"badge " + (!online ? "offline" : "")}>
               {online ? (
                 "Online"
@@ -306,10 +339,69 @@ export function App() {
           </div>
         </header>
         <main className="page-content">
-          <div className="demo-strip">
-            Judge environment · S1 replay: 8 January 2026 · legacy October
-            fixtures · private challenge data
-          </div>
+          {account.role === "DISPATCHER" && (
+            <div className="day-toolbar">
+              <span>Operating day · Asia/Colombo</span>
+              <input
+                aria-label="Operating day"
+                type="date"
+                value={operatingDay}
+                onChange={(e) => {
+                  setOperatingDay(e.target.value);
+                  localStorage.setItem(
+                    "waypoint-operating-day",
+                    e.target.value,
+                  );
+                }}
+              />
+            </div>
+          )}
+          {demoInformation && (
+            <div className="modal-backdrop">
+              <section
+                className="panel demo-dialog"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="demo-title"
+              >
+                <div className="section-title">
+                  <h2 id="demo-title">Demo information</h2>
+                  <Button
+                    variant="outline"
+                    onClick={() => setDemoInformation(false)}
+                  >
+                    Close
+                  </Button>
+                </div>
+                <p>
+                  Waypoint judge environment. S1 is an undated source scenario
+                  replayed on 8 January 2026; operating times use Asia/Colombo.
+                  Capture and audit timestamps use actual demonstration time.
+                </p>
+                <p>
+                  Source quantities, capacities, windows and identifiers are
+                  retained. District-town road waypoints and 2–5°C judge cold
+                  capabilities are supplemental, not verified outlet geography
+                  or certified fleet capabilities.
+                </p>
+                <p>
+                  OSRM provides car-profile road geometry and travel estimates.
+                  There is no live traffic, truck clearance model or
+                  straight-line fallback. Forecasting remains deferred to the
+                  Datathon.
+                </p>
+                <p>
+                  October catalogue and workflow fixtures are explicitly
+                  supplemental. The named retailer examples are not customer or
+                  integration claims.
+                </p>
+                <p>
+                  Evidence is scoped to your account. Signing out preserves
+                  pending proof on this device; browser storage is not a backup.
+                </p>
+              </section>
+            </div>
+          )}
           {!online && (
             <Notice tone="warning">
               Showing your last saved assignments
@@ -350,6 +442,8 @@ export function App() {
               )}
               {account.role === "DISPATCHER" && (
                 <Dispatcher
+                  screen={screen}
+                  day={operatingDay}
                   orders={orders.data}
                   vehicles={vehicles.data || []}
                   catalog={catalog.data}

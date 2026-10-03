@@ -13,7 +13,7 @@ import { api } from "../lib/api";
 import type { Account, Catalog, Order, Vehicle, Conflict } from "../lib/models";
 import { offlineDb, type OutboxAction } from "../lib/offline-db";
 import { saveProof, syncProofs } from "../lib/sync";
-import { PlanningBoard } from "./planning";
+import { PlanningBoard } from "./planning-workspace";
 
 export const statusLabel = (value: string) =>
   ({
@@ -528,6 +528,8 @@ function Receipt({
   );
 }
 export function Dispatcher({
+  screen = "orders",
+  day = "2026-01-08",
   orders,
   vehicles,
   catalog,
@@ -535,6 +537,8 @@ export function Dispatcher({
   action,
   busy,
 }: {
+  screen?: string;
+  day?: string;
   orders: Order[];
   vehicles: Vehicle[];
   catalog: Catalog;
@@ -554,6 +558,22 @@ export function Dispatcher({
     vehicle = vehicles.find((v) => v.id === vehicleId);
   const kg = order?.lines.reduce((n, l) => n + l.ordered * l.weight_kg, 0) || 0,
     m3 = order?.lines.reduce((n, l) => n + l.ordered * l.volume_m3, 0) || 0;
+  if (screen === "planning")
+    return (
+      <>
+        <div className="page-heading design-heading">
+          <p className="eyebrow">Planning / assisted allocation</p>
+          <h1>Assign store orders to vehicle runs</h1>
+          <p>
+            {day} service ·{" "}
+            {orders.find((o) => o.day === day)?.run?.vehicle_id
+              ? "Published handoffs and editable proposals"
+              : "Review whole-order assignments before publication"}
+          </p>
+        </div>
+        <PlanningBoard day={day} />
+      </>
+    );
   return (
     <>
       <div className="page-heading">
@@ -587,7 +607,6 @@ export function Dispatcher({
           </Panel>
         ))}
       </div>
-      <PlanningBoard />
       <div className="planning-grid">
         <Panel>
           <h2>Order queue</h2>

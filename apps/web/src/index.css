@@ -3,6 +3,10 @@
 @import "@fontsource/dm-sans/500.css";
 @import "@fontsource/dm-sans/600.css";
 @import "@fontsource/dm-sans/700.css";
+@import "@fontsource/inter/400.css";
+@import "@fontsource/inter/500.css";
+@import "@fontsource/inter/600.css";
+@import "@fontsource/inter/700.css";
 :root {
   --background: #f5f7f8;
   --foreground: #17262f;
@@ -748,4 +752,632 @@ textarea {
   .product-copy {
     min-width: 140px;
   }
+}
+/* Figma 2116:28, 2091:23 and 2292:45: semantic surfaces and 8px rhythm. */
+:root {
+  --radius-panel: 8px;
+  --space-1: 8px;
+  --space-2: 16px;
+  --space-3: 24px;
+  --success-soft: #e3f1f4;
+  --offline: #62737e;
+}
+:root[data-theme="night"] {
+  --success-soft: #24414a;
+  --offline: #acc0c9;
+}
+body {
+  font-variant-numeric: tabular-nums;
+}
+.sidebar {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 20;
+  padding: 24px 12px;
+}
+.sidebar .wordmark {
+  padding: 0 12px;
+}
+.sidebar nav {
+  display: grid;
+  gap: 8px;
+  margin-top: 48px;
+}
+.nav-item {
+  margin: 0;
+  width: 100%;
+  min-height: 40px;
+  background: none;
+  border: 0;
+  color: var(--muted-foreground);
+  text-align: left;
+  font-size: 13px;
+  padding: 10px 12px;
+  border-left: 3px solid transparent;
+}
+.nav-item.active {
+  background: var(--action-soft);
+  border-left-color: var(--primary);
+  color: var(--primary);
+}
+.sidebar-account {
+  border-top: 1px solid var(--border);
+  padding: 20px 8px 0;
+  align-items: center;
+}
+.role-DISPATCHER .workspace {
+  margin-left: 190px;
+}
+.role-DISPATCHER .app-header {
+  min-height: 64px;
+  padding: 8px 30px;
+}
+.role-DISPATCHER .page-content {
+  padding: 16px 30px 32px;
+}
+.day-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 12px;
+  color: var(--muted-foreground);
+  font-size: 12px;
+}
+.day-toolbar input {
+  min-height: 32px;
+  padding: 6px 8px;
+  width: 150px;
+}
+.demo-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 32px;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--card);
+  color: var(--muted-foreground);
+  font-size: 11px;
+}
+.design-heading {
+  margin: 12px 0 24px;
+  position: relative;
+}
+.design-heading::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  top: -70px;
+  width: 481px;
+  height: 481px;
+  background: url("/design/2292-45-fd16d.svg") no-repeat;
+  pointer-events: none;
+  z-index: -1;
+}
+.design-heading > .eyebrow {
+  font-size: 11px;
+  text-transform: uppercase;
+  margin: 0 0 8px;
+}
+.design-heading h1 {
+  font-size: 29px;
+  line-height: 39px;
+}
+.design-heading > p:last-child {
+  font-size: 12px;
+  margin: 6px 0 0;
+}
+.compact-metrics {
+  gap: 16px;
+  margin: 0 0 24px;
+}
+.metric-card {
+  padding: 16px;
+  min-height: 88px;
+}
+.metric-card > small {
+  text-transform: uppercase;
+  font-size: 11px;
+}
+.metric-card > div {
+  display: flex;
+  gap: 16px;
+  align-items: baseline;
+  margin-top: 8px;
+}
+.metric-card strong {
+  margin: 0;
+  font-size: 25px;
+  line-height: 34px;
+}
+.metric-card span {
+  color: var(--muted-foreground);
+  font-size: 11px;
+}
+.planning-product {
+  min-width: 0;
+}
+.planning-toolbar {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: center;
+  padding: 16px;
+  background: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 8px 8px 0 0;
+}
+.planning-toolbar h2 {
+  font-size: 19px;
+  margin-bottom: 4px;
+}
+.planning-product .button {
+  min-height: 40px;
+  padding: 8px 12px;
+  font-size: 12px;
+}
+.assignment-workspace {
+  display: grid;
+  grid-template-columns: minmax(280px, 0.9fr) minmax(310px, 1.1fr) minmax(
+      260px,
+      0.85fr
+    );
+  gap: 16px;
+  padding: 16px;
+  background: var(--muted);
+  border: 1px solid var(--border);
+  border-top: 0;
+  border-radius: 0 0 8px 8px;
+  align-items: start;
+}
+.assignment-workspace .panel {
+  margin: 0;
+  padding: 16px;
+  min-width: 0;
+}
+.assignment-workspace h3 {
+  font-size: 13px;
+}
+.section-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.search-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  margin: 16px 0 8px;
+  padding: 0 8px;
+}
+.search-field input {
+  background: none;
+  border: 0;
+  min-height: 40px;
+  padding: 8px 0;
+  font-size: 12px;
+}
+.filter-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 12px;
+}
+.filter-row select {
+  min-height: 34px;
+  padding: 6px;
+  font-size: 12px;
+}
+.text-button {
+  border: 0;
+  background: none;
+  color: var(--primary);
+  font-size: 12px;
+  white-space: nowrap;
+  min-height: 36px;
+}
+.table-scroll {
+  max-height: 460px;
+  overflow: auto;
+}
+.orders-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.orders-table thead {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--muted);
+}
+.orders-table th {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--muted-foreground);
+  text-align: left;
+  padding: 10px 8px;
+}
+.orders-table td {
+  border-bottom: 1px solid var(--border);
+  padding: 12px 8px;
+  vertical-align: top;
+}
+.orders-table tr[class*="brand-"] td:first-child {
+  border-left: 3px solid var(--brand);
+}
+.orders-table tr.selected {
+  background: var(--action-soft);
+}
+.orders-table input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  min-height: 18px;
+  margin: 4px 0;
+  accent-color: var(--primary);
+}
+.orders-table strong {
+  display: block;
+  font-size: 12px;
+}
+.orders-table small {
+  display: block;
+  font-size: 11px;
+  margin-top: 4px;
+}
+.panel-foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+  margin-top: 12px;
+  font-size: 12px;
+}
+.subtle-text {
+  font-size: 12px;
+  color: var(--muted-foreground);
+}
+.trip-scroll {
+  max-height: 460px;
+  overflow: auto;
+  margin: 12px 0;
+}
+.trip-card {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--brand);
+  border-radius: 6px;
+  padding: 12px;
+  margin-bottom: 8px;
+  background: var(--card);
+  color: var(--foreground);
+}
+.trip-card.selected {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+  background: var(--action-soft);
+}
+.trip-card strong {
+  font-size: 13px;
+}
+.trip-card small {
+  display: block;
+  margin: 6px 0;
+}
+.utilization {
+  display: flex;
+  gap: 16px;
+  font-size: 11px;
+  color: var(--muted-foreground);
+}
+.stop-path {
+  font-size: 11px;
+  color: var(--brand);
+  margin: 8px 0;
+}
+.trip-card .badge {
+  font-size: 10px;
+  padding: 4px 8px;
+}
+.empty-state {
+  padding: 32px 8px;
+  text-align: center;
+  color: var(--muted-foreground);
+  display: grid;
+  gap: 12px;
+  justify-items: center;
+  font-size: 13px;
+}
+.published-plans {
+  margin-top: 16px;
+  font-size: 12px;
+}
+.published-run {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+}
+.published-run small {
+  display: block;
+}
+.selected-trip {
+  max-height: 660px;
+  overflow: auto;
+}
+.trip-settings label {
+  font-size: 12px;
+  margin: 12px 0;
+  gap: 6px;
+}
+.trip-settings select,
+.trip-settings input {
+  min-height: 38px;
+  padding: 8px;
+  font-size: 12px;
+}
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.capacity-bar {
+  margin: 12px 0;
+  font-size: 11px;
+}
+.capacity-bar > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.capacity-bar progress {
+  width: 100%;
+  height: 6px;
+  accent-color: var(--primary);
+}
+.road-map {
+  height: 220px;
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.road-map .maplibregl-ctrl-attrib {
+  font-size: 9px;
+}
+.map-caption {
+  display: block;
+  font-size: 10px;
+  margin-top: 6px;
+}
+.map-warning {
+  font-size: 12px;
+  color: var(--warning);
+  margin-top: 8px;
+}
+.route-facts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin: 12px 0;
+  font-size: 11px;
+}
+.ordered-checkpoints {
+  padding: 0;
+  list-style: none;
+}
+.ordered-checkpoints > li {
+  display: flex;
+  gap: 10px;
+  padding: 12px 0;
+  border-top: 1px solid var(--border);
+}
+.ordered-checkpoints strong {
+  font-size: 12px;
+}
+.ordered-checkpoints small {
+  display: block;
+  font-size: 11px;
+  margin-top: 4px;
+}
+.checkpoint-number {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--action-soft);
+  color: var(--primary);
+  font-size: 12px;
+  font-weight: 700;
+}
+.stop-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+.stop-actions button {
+  min-height: 32px;
+  padding: 6px;
+  background: var(--card);
+  color: var(--primary);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 11px;
+}
+.ordered-checkpoints label {
+  font-size: 11px;
+  margin: 8px 0 0;
+}
+.ordered-checkpoints select {
+  font-size: 11px;
+  min-height: 32px;
+  padding: 6px;
+}
+.planning-action-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  position: sticky;
+  bottom: 0;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin-top: 16px;
+  z-index: 5;
+  box-shadow: 0 -4px 20px #17262f08;
+}
+.planning-action-bar label {
+  flex: 1;
+  font-size: 11px;
+  margin: 0;
+  gap: 4px;
+}
+.planning-action-bar input {
+  min-height: 36px;
+  padding: 8px;
+  font-size: 12px;
+}
+.deferred-draft {
+  margin-top: 16px;
+}
+.deferred-draft > h3 {
+  margin-bottom: 8px;
+}
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: #101b2380;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+}
+.demo-dialog {
+  max-width: 640px;
+  max-height: 85vh;
+  overflow: auto;
+}
+.demo-dialog p {
+  margin-top: 16px;
+}
+@media (max-width: 1250px) {
+  .assignment-workspace {
+    grid-template-columns: minmax(260px, 1fr) minmax(280px, 1fr);
+  }
+  .selected-trip {
+    grid-column: 1/-1;
+    max-height: none;
+  }
+  .planning-toolbar {
+    flex-wrap: wrap;
+  }
+}
+@media (max-width: 760px) {
+  .sidebar {
+    position: static;
+    width: 100%;
+    height: auto;
+    padding: 16px;
+  }
+  .sidebar nav {
+    display: flex;
+    overflow: auto;
+    margin-top: 16px;
+  }
+  .nav-item {
+    min-width: max-content;
+  }
+  .sidebar-account {
+    display: none;
+  }
+  .role-DISPATCHER {
+    display: block;
+  }
+  .role-DISPATCHER .workspace {
+    margin: 0;
+  }
+  .role-DISPATCHER .page-content {
+    padding: 16px;
+  }
+  .assignment-workspace {
+    grid-template-columns: 1fr;
+    padding: 8px;
+    gap: 8px;
+  }
+  .selected-trip {
+    grid-column: auto;
+  }
+  .planning-action-bar {
+    flex-wrap: wrap;
+  }
+  .planning-action-bar label {
+    flex-basis: 100%;
+  }
+  .compact-metrics {
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  .demo-indicator {
+    min-height: 40px;
+  }
+}
+.role-DISPATCHER .workspace {
+  position: relative;
+}
+.role-DISPATCHER .app-header {
+  position: absolute;
+  top: 16px;
+  right: 30px;
+  padding: 0;
+  min-height: 0;
+  background: none;
+  border: 0;
+  z-index: 10;
+}
+.role-DISPATCHER .app-header > div:first-child {
+  display: none;
+}
+.role-DISPATCHER .day-toolbar {
+  position: absolute;
+  top: 80px;
+  right: 30px;
+  z-index: 2;
+}
+.role-DISPATCHER .design-heading {
+  padding: 4px 0 20px;
+  margin: 0 0 16px;
+  border-bottom: 1px solid var(--border);
+}
+.role-DISPATCHER .design-heading {
+  background-image: none;
+}
+@media (max-width: 760px) {
+  .role-DISPATCHER .app-header {
+    position: static;
+    padding: 8px 16px;
+    background: var(--card);
+  }
+  .role-DISPATCHER .day-toolbar {
+    position: static;
+    margin-bottom: 16px;
+  }
+}
+.role-DISPATCHER .page-content {
+  background-image: none;
 }
