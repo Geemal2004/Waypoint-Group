@@ -1,8 +1,40 @@
 # AWS deployment
 
-AWS deployment is the next active task. The user confirmed a competition environment: retain labelled judge inputs and the four-role demonstration, while keeping local development separate. No AWS resources have been created yet. The local application and database remain intact. Account access, region, monthly budget and deployment hostname must be established before selecting and provisioning the cloud topology.
+The competition target is an Ubuntu 24.04 Lightsail instance at `18.138.29.235`, with 4 GB RAM, 2 vCPUs and 80 GB SSD. Docker and Compose are installed; SSH connectivity and free disk were inspected on 4 October 2026. The HTTPS hostname is `18-138-29-235.sslip.io` because no owned domain was supplied. The application rollout and public HTTPS checks remain pending.
 
 Preparation verified on 3 October 2026: both PowerShell scripts parse; the release archive was created and inspected (189 committed files, no `.env` or private data); missing CLI fails explicitly. AWS CLI is not installed or authenticated here. The official installer download timed out before completion; no unverified installer was executed. Cloud deployment and cloud smoke tests remain pending.
+
+## Lightsail competition release
+
+Allow inbound TCP 80 and 443 in the Lightsail Networking tab. SSH remains subject to your instance SSH rule. Caddy manages public certificates and forwards authenticated APIs/SSE without caching. Only the HTTPS edge is published; PostgreSQL, Redis, core, Python and OSRM remain inside Docker. Four judge accounts use private competition credentials rather than documented local defaults. The cloud build hides the local default password on the login screen.
+
+Use the supplied private SSH key locally; never upload it. Server layout:
+
+- `/opt/waypoint/releases/<commit>`: immutable source releases.
+- `/opt/waypoint/shared/cloud.env`: private database configuration and hostname (mode 600).
+- `/opt/waypoint/shared/private`: approved judge SQL and initial account rotation SQL.
+- `/opt/waypoint/shared/osrm`: prepared road files and provenance.
+- `/opt/waypoint/shared/backups`: private database dumps and hashes.
+- `/opt/waypoint/current`: the last successfully started release.
+
+The fixed Compose project is `waypoint-judge`; database and certificate volumes survive release changes. The first cloud database is a fresh judge installation, not a copy of local order history. Source datasets require explicit transfer authorization. Locally generated cloud credentials are kept in ignored `data/private/lightsail-credentials.json`.
+
+After approved private inputs and a source release are installed:
+
+```bash
+bash /opt/waypoint/releases/<commit>/deploy/lightsail/start-release.sh /opt/waypoint/releases/<commit>
+```
+
+The script checks required inputs, backs up an existing cloud database before migrations, builds services serially for the 4 GB host, starts internal services, replaces fresh public demo passwords through audited SQL, then starts HTTPS. Rotation changes only accounts still using the documented default password; later account changes survive redeployment. It records deployed image IDs/digests and advances `current` after startup. Never invoke demo reset during a release.
+
+```bash
+bash /opt/waypoint/current/deploy/lightsail/backup.sh
+cd /opt/waypoint/current
+docker compose -p waypoint-judge -f compose.yaml -f compose.lightsail.yaml --profile routing ps
+docker compose -p waypoint-judge -f compose.yaml -f compose.lightsail.yaml --profile routing logs --tail 100 core edge
+```
+
+These backups are on the same host. Copy them to restricted encrypted off-host storage. Previous releases support code rollback, subject to migration compatibility. Preserve the database volume and take a backup before every update. This is a single competition server, with no high-availability claim.
 
 ## Prepare an immutable release
 

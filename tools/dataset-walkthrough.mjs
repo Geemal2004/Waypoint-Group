@@ -12,7 +12,7 @@ class Client {
     const result=r.status===204?null:await r.json();assert.equal(r.status,expect,`${path}: ${JSON.stringify(result)}`);return result;
   }
   async csrf(){const c=await this.call('/auth/csrf');this.token=c.token;this.header=c.headerName;}
-  async login(username){await this.csrf();await this.call('/auth/login',{method:'POST',type:'application/x-www-form-urlencoded',body:new URLSearchParams({username,password:'WaypointDemo!2026'}).toString()});await this.csrf();}
+  async login(username){await this.csrf();await this.call('/auth/login',{method:'POST',type:'application/x-www-form-urlencoded',body:new URLSearchParams({username,password:process.env.WAYPOINT_DEMO_PASSWORD||'WaypointDemo!2026'}).toString()});await this.csrf();}
   post(path,body,expect=200){return this.call(path,{method:'POST',body,expect});}
 }
 const manager=new Client(),dispatcher=new Client(),loader=new Client(),driver=new Client();

@@ -600,9 +600,13 @@ function Login({
         <details>
           <summary>Judge demo accounts</summary>
           <p>manager · dispatcher · loader · driver</p>
-          <p>
-            Password: <code>WaypointDemo!2026</code>
-          </p>
+          {import.meta.env.VITE_SHOW_DEMO_PASSWORD !== "false" ? (
+            <p>
+              Password: <code>WaypointDemo!2026</code>
+            </p>
+          ) : (
+            <p>Use the competition password supplied by the team.</p>
+          )}
           <small>
             Synthetic walkthrough only. Each account has a server-assigned role
             and scope.
