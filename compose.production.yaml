@@ -1,0 +1,21 @@
+# Compose >= 2.24.4. Use an isolated production project and reviewed private imports.
+services:
+  db:
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set a private production database password}
+  core:
+    environment:
+      DB_PASSWORD: ${POSTGRES_PASSWORD:?Set a private production database password}
+      DEMO_SEED: "false"
+      SESSION_SECURE: "true"
+      NETWORK_IMPORT: /seed/production-network.sql
+      LOGGING_STRUCTURED_FORMAT_CONSOLE: ecs
+  web:
+    ports: !override
+      - "${HTTPS_BIND:-127.0.0.1}:${HTTPS_PORT:-8443}:443"
+    volumes:
+      - ./deploy/nginx-https.conf:/etc/nginx/conf.d/default.conf:ro
+      - ${TLS_DIRECTORY:?Set the private certificate directory}:/run/waypoint-tls:ro
+    healthcheck:
+      test:
+        [CMD, wget, -q, --no-check-certificate, --spider, https://127.0.0.1/]
