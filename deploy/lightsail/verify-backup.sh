@@ -23,8 +23,11 @@ for attempt in $(seq 1 90); do
   sleep 1
 done
 [[ "$ready" == true ]] || { echo 'Isolated restore database did not become ready'; exit 1; }
-docker exec -i "$container" pg_restore --exit-on-error --no-owner --no-privileges -U postgres -d restorecheck < "$backup"
-counts="$(docker exec "$container" psql -U postgres -d restorecheck -Atc "SELECT (SELECT count(*) FROM flyway_schema_history WHERE success), (SELECT count(*) FROM orders WHERE scenario='S1'), (SELECT count(*) FROM source_records), (SELECT count(*) FROM route_stops s LEFT JOIN route_trips t ON t.id=s.route_trip_id LEFT JOIN orders o ON o.id=s.order_id WHERE t.id IS NULL OR o.id IS NULL), (SELECT count(*) FROM processed_sync_actions)")"
+# The image initializes PostGIS/tiger in POSTGRES_DB. Restore into a separate
+# template0 database so the dump can recreate its own extension schemas.
+docker exec "$container" createdb -U postgres -T template0 restored
+docker exec -i "$container" pg_restore --exit-on-error --no-owner --no-privileges -U postgres -d restored < "$backup"
+counts="$(docker exec "$container" psql -U postgres -d restored -Atc "SELECT (SELECT count(*) FROM flyway_schema_history WHERE success), (SELECT count(*) FROM orders WHERE scenario='S1'), (SELECT count(*) FROM source_records), (SELECT count(*) FROM route_stops s LEFT JOIN route_trips t ON t.id=s.route_trip_id LEFT JOIN orders o ON o.id=s.order_id WHERE t.id IS NULL OR o.id IS NULL), (SELECT count(*) FROM processed_sync_actions)")"
 IFS='|' read -r migrations source_orders source_records orphans proofs <<< "$counts"
 [[ "$migrations" -ge 7 && "$source_orders" -eq 85 && "$source_records" -ge 12692 && "$orphans" -eq 0 && "$proofs" -gt 0 ]] || { echo 'Restored judge data/evidence checks failed'; exit 1; }
 echo "PASS: isolated cloud restore; $migrations migrations, $source_orders S1 orders, $source_records source records, $proofs proof actions, zero orphaned stops. Live database untouched."

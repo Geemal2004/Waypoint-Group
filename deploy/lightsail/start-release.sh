@@ -43,6 +43,9 @@ docker run --rm --entrypoint sh -v "$shared/private:/seed:ro" waypoint-judge-cor
 # SQL changes only accounts still using the public default password.
 "${compose[@]}" exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1' < "$shared/private/cloud-accounts.sql" >/dev/null
 "${compose[@]}" up -d --wait --wait-timeout 300 edge
+"${compose[@]}" exec -T planning python -c 'import json,urllib.request; r=json.load(urllib.request.urlopen("http://osrm:5000/nearest/v1/driving/79.867,6.953?number=1",timeout=10)); assert r["code"]=="Ok" and r["waypoints"]'
+waypoint_host="$(sed -n 's/^WAYPOINT_HOST=//p' "$shared/cloud.env" | tr -d '\r')"
+curl --fail --silent --show-error --output /dev/null --connect-timeout 3 --max-time 10 --retry 6 --retry-delay 2 --retry-all-errors --resolve "$waypoint_host:443:127.0.0.1" "https://$waypoint_host/"
 "${compose[@]}" images > "$release/deployed-images.txt"
 docker inspect $("${compose[@]}" ps -q) --format '{{.Name}} {{.Image}}' > "$release/deployed-image-digests.txt"
 ln -sfn "$release" /opt/waypoint/current
