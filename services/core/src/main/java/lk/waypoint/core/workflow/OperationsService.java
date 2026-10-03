@@ -36,7 +36,8 @@ public class OperationsService {
         var order=accessible(account,id,false);
         var result=new LinkedHashMap<>(order);
         result.put("lines",lines(id));
-        result.put("run",jdbc.queryForList("select r.*,v.name vehicle_name,v.weight_kg capacity_kg,v.volume_m3 capacity_m3,a.display_name driver_name from runs r join vehicles v on v.id=r.vehicle_id join accounts a on a.id=v.driver_id where r.order_id=?",id).stream().findFirst().orElse(null));
+        result.put("run",jdbc.queryForList("select r.*,v.name vehicle_name,v.weight_kg capacity_kg,v.volume_m3 capacity_m3,a.display_name driver_name,s.id stop_id,s.sequence stop_sequence,s.loading_sequence,s.arrival_at planned_arrival,s.service_start_at,s.service_end_at,t.plan_id from runs r join vehicles v on v.id=r.vehicle_id join accounts a on a.id=v.driver_id left join route_stops s on s.run_id=r.id left join route_trips t on t.id=r.route_trip_id where r.order_id=?",id).stream().findFirst().orElse(null));
+        result.put("tripStops",jdbc.queryForList("select s.id stop_id,s.order_id,s.sequence,s.loading_sequence,o.outlet_id,o.status,r.plan_version from route_stops s join orders o on o.id=s.order_id join runs r on r.id=s.run_id where s.route_trip_id=(select route_trip_id from runs where order_id=?) and (? <> 'MANAGER' or exists(select 1 from account_outlets a where a.account_id=? and a.outlet_id=o.outlet_id)) order by s.sequence",id,account.role(),account.id()));
         result.put("loadingIssues",jdbc.queryForList("select i.* from loading_issues i join runs r on r.id=i.run_id where r.order_id=?",id));
         result.put("proof",jdbc.queryForList("select id,content_type,captured_at,accepted_at,notes from proofs where order_id=?",id).stream().findFirst().orElse(null));
         result.put("receipt",jdbc.queryForList("select * from receipts where order_id=?",id).stream().findFirst().orElse(null));
@@ -54,6 +55,7 @@ public class OperationsService {
         for(var item:request.items()) {
             require(unique.add(item.productId()),"DUPLICATE_PRODUCT","Combine repeated products into one line.");
             var product=row("select * from products where id=?",item.productId());
+            require(Boolean.TRUE.equals(product.get("demo")),"SOURCE_AGGREGATE_ONLY","Source aggregate units belong to their imported orders; select a demo catalogue product for this fixture order.");
             require(product.get("brand_code").equals(outlet.get("brand_code")),"BRAND_MISMATCH","Products must belong to the outlet brand.");
             String next=(String)product.get("temperature");
             if(temperature==null) temperature=next;
@@ -73,10 +75,12 @@ public class OperationsService {
 
     @Transactional public Map<String,Object> publish(Account account,UUID id,Contracts.Publish request) {
         role(account,"DISPATCHER");
+        accessible(account,id,false);
+        // Match multi-stop publication's vehicle-before-order lock order.
+        var vehicle=row("select * from vehicles where id=? for update",request.vehicleId());
         var order=editable(account,id,request.expectedVersion());
         transition((String)order.get("status"),"SCHEDULED");
         // Serialize all trip/fuel reservations for a vehicle, not just this order.
-        var vehicle=row("select * from vehicles where id=? for update",request.vehicleId());
         validateAssignment(account,order,vehicle,request);
         jdbc.update("insert into runs(id,order_id,vehicle_id,day,trip,loader_id,plan_version,departure_at,return_at,estimated_fuel_l,override_reason) values(?,?,?,?,?,?,1,?,?,?,?)",
             UUID.randomUUID(),id,request.vehicleId(),order.get("day"),request.trip(),request.loaderId(),java.sql.Timestamp.from(request.departureAt()),java.sql.Timestamp.from(request.returnAt()),request.estimatedFuelL(),request.reason());
@@ -116,14 +120,14 @@ public class OperationsService {
         // Synthetic fixture only: a supplied schedule must reserve some time inside the receiving window.
         require(depart.toLocalTime().isBefore(windowEnd) && back.toLocalTime().isAfter(windowStart),"WINDOW_MISSED","The trip does not intersect the outlet receiving window. No road ETA is implied.");
         if("FRESH".equals(order.get("brand_code"))) require(depart.toLocalTime().isBefore(LocalTime.of(8,0)),"FRESH_OPENING","Fresh must depart before 08:00. Actual arrival feasibility still requires road routing.");
-        var scheduled=jdbc.queryForList("select * from runs where vehicle_id=? and day=?",request.vehicleId(),day);
+        var scheduled=jdbc.queryForList("select distinct on (coalesce(route_trip_id,id)) * from runs where vehicle_id=? and day=?",request.vehicleId(),day);
         require(scheduled.size()<2,"TRIP_LIMIT","At most two trips per vehicle and day.");
         for(var run:scheduled) {
             Instant start=((java.sql.Timestamp)run.get("departure_at")).toInstant(); Instant end=((java.sql.Timestamp)run.get("return_at")).toInstant();
             require(!request.departureAt().isBefore(end.plusSeconds(1800)) || !request.returnAt().plusSeconds(1800).isAfter(start),"TRIP_OVERLAP","Trips require non-overlap and a declared synthetic 30-minute reloading allowance.");
         }
         var week=day.with(java.time.temporal.TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
-        double fuel=jdbc.queryForObject("select coalesce(sum(estimated_fuel_l),0) from runs where vehicle_id=? and day>=? and day<?",Double.class,request.vehicleId(),week,week.plusDays(7));
+        double fuel=jdbc.queryForObject("select coalesce(sum(fuel_l),0) from (select estimated_fuel_l fuel_l from runs where vehicle_id=? and day>=? and day<? and route_trip_id is null union all select fuel_l from route_trips where vehicle_id=? and day>=? and day<?) reservations",Double.class,request.vehicleId(),week,week.plusDays(7),request.vehicleId(),week,week.plusDays(7));
         require(fuel+request.estimatedFuelL()<=number(vehicle,"weekly_fuel_l").doubleValue(),"WEEKLY_FUEL_EXCEEDED","Combined reserved weekly fuel exceeds the fixture allowance in litres.");
     }
 
@@ -161,7 +165,20 @@ public class OperationsService {
         update(id,"RELEASED"); audit(account,id,"LOAD_RELEASED","Final release check passed. Known shortages carry forward."); return detail(account,id);
     }
     @Transactional public Map<String,Object> start(Account account,UUID id,int version) {
-        role(account,"DRIVER"); var order=editable(account,id,version); transition((String)order.get("status"),"IN_TRANSIT");
+        role(account,"DRIVER");
+        accessible(account,id,false);
+        var parent=jdbc.queryForList("select route_trip_id from runs where order_id=?",id);
+        if(!parent.isEmpty() && parent.getFirst().get("route_trip_id")!=null) {
+            UUID tripId=(UUID)parent.getFirst().get("route_trip_id");
+            row("select id from route_trips where id=? for update",tripId);
+            var manifest=jdbc.queryForList("select o.id,o.status,r.released_at from orders o join runs r on r.order_id=o.id where r.route_trip_id=? order by o.id for update of o",tripId);
+            editable(account,id,version);
+            require(manifest.stream().allMatch(o->"RELEASED".equals(o.get("status"))&&o.get("released_at")!=null),"LOAD_NOT_RELEASED","Loader must release every stop before the trip starts.");
+            jdbc.update("update runs set acknowledged_driver=true,started_at=now() where route_trip_id=?",tripId);
+            for(var stop:manifest) { UUID orderId=(UUID)stop.get("id");update(orderId,"IN_TRANSIT");audit(account,orderId,"RUN_STARTED","Driver acknowledged multi-stop trip "+tripId); }
+            return detail(account,id);
+        }
+        var order=editable(account,id,version); transition((String)order.get("status"),"IN_TRANSIT");
         var run=row("select * from runs where order_id=?",id);
         require(run.get("released_at")!=null,"LOAD_NOT_RELEASED","Loader must release this load first.");
         jdbc.update("update runs set acknowledged_driver=true,started_at=now() where order_id=?",id);
@@ -169,6 +186,7 @@ public class OperationsService {
     }
     @Transactional public Map<String,Object> arrive(Account account,UUID id,int version) {
         role(account,"DRIVER"); var order=editable(account,id,version); transition((String)order.get("status"),"ARRIVED");
+        require(jdbc.queryForObject("select count(*) from route_stops current join route_stops previous on previous.route_trip_id=current.route_trip_id and previous.sequence<current.sequence join orders o on o.id=previous.order_id where current.order_id=? and o.status not in ('DELIVERED','RECEIVED_AT_STORE','DEFERRED')",Integer.class,id)==0,"STOP_ORDER","Complete or explicitly defer earlier stops before arriving here.");
         jdbc.update("update runs set arrived_at=now() where order_id=?",id);
         update(id,"ARRIVED"); audit(account,id,"STOP_ARRIVED","Driver confirmed arrival while safely stopped."); return detail(account,id);
     }
@@ -195,12 +213,13 @@ public class OperationsService {
         role(account,"DISPATCHER"); var order=editable(account,id,request.expectedVersion()); transition((String)order.get("status"),"DEFERRED");
         LocalDate day=((java.sql.Date)order.get("day")).toLocalDate();
         require(request.nextDay().isAfter(day),"INVALID_NEXT_DAY","Next eligible run must follow the original date.");
-        require(jdbc.queryForObject("select count(*) from operating_days where day=?",Integer.class,request.nextDay())==1,"INELIGIBLE_DAY","Choose a persisted operating day.");
-        require(!"STYLE".equals(order.get("brand_code")) || request.nextDay().getDayOfWeek()==DayOfWeek.MONDAY,"STYLE_SCHEDULE","The synthetic Style schedule is Mondays.");
+        require(jdbc.queryForObject("select count(*) from operating_days where day=? and demo=?",Integer.class,request.nextDay(),order.get("demo"))==1,"INELIGIBLE_DAY","Choose a persisted operating day from the same calendar.");
+        require(!Boolean.TRUE.equals(order.get("demo")) || !"STYLE".equals(order.get("brand_code")) || request.nextDay().getDayOfWeek()==DayOfWeek.MONDAY,"STYLE_SCHEDULE","The synthetic Style schedule is Mondays.");
         LocalDate previous=jdbc.queryForObject("select max(day) from operating_days where day<? and demo=?",LocalDate.class,day,order.get("demo"));
         Integer sameDaySkips=jdbc.queryForObject("select coalesce(max(d.consecutive_skips),0) from deferrals d join orders o on o.id=d.order_id where o.outlet_id=? and o.temperature=? and o.day=? and o.status='DEFERRED'",Integer.class,order.get("outlet_id"),order.get("temperature"),day);
         Integer previousSkips=previous==null?0:jdbc.queryForObject("select coalesce(max(d.consecutive_skips),0) from deferrals d join orders o on o.id=d.order_id where o.outlet_id=? and o.temperature=? and o.day=? and o.status='DEFERRED'",Integer.class,order.get("outlet_id"),order.get("temperature"),previous);
-        int skips=sameDaySkips>0?sameDaySkips:previousSkips+1;
+        int baseline=Boolean.TRUE.equals(order.get("deferred_yesterday"))?1:0;
+        int skips=sameDaySkips>0?sameDaySkips:Math.max(previousSkips,baseline)+1;
         jdbc.update("insert into deferrals values(?,?,?,?,now(),?,?)",UUID.randomUUID(),id,account.id(),request.reason(),request.nextDay(),skips);
         update(id,"DEFERRED"); audit(account,id,"ORDER_DEFERRED",request.reason()+" · next eligible "+request.nextDay()); return detail(account,id);
     }

@@ -4,13 +4,13 @@ from app.main import app
 client = TestClient(app)
 
 
-def test_service_does_not_claim_solver_is_ready():
+def test_service_declares_assisted_solver_and_deferred_ml():
     response = client.get("/health")
     assert response.status_code == 200
-    assert response.json()["solverReady"] is False
+    assert response.json()["solverReady"] is True
+    assert response.json()["modelReady"] is False
 
 
-def test_unimplemented_planner_never_returns_fake_allocation():
+def test_missing_road_contract_never_returns_fake_allocation():
     response = client.post("/v1/plans", json={})
-    assert response.status_code == 501
-    assert response.json()["code"] == "PLANNING_NOT_IMPLEMENTED"
+    assert response.status_code == 422
