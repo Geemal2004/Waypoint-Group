@@ -838,7 +838,8 @@ export function Dispatcher({
               refrigerated setpoint is required.
             </p>
             <p>
-              At most two trips, with a synthetic 30-minute reload allowance.
+              At most two trips; the next departure must allow depot return and
+              the configured reload time.
             </p>
             <p>
               Protected Tech handling and mall access carry into loading and

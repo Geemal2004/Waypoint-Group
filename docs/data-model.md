@@ -1,6 +1,6 @@
 # Implemented data model
 
-Flyway V1–V4 run automatically. PostgreSQL constraints enforce identity, quantity bounds and relationships. Timestamps are UTC; operating dates/windows use Asia/Colombo. Device capture and server acceptance times remain separate.
+Flyway V1–V5 run automatically. PostgreSQL constraints enforce identity, quantity bounds and relationships. Timestamps are UTC; operating dates/windows use Asia/Colombo. Device capture and server acceptance times remain separate.
 
 | Table | Relationships and fields |
 | --- | --- |
@@ -13,7 +13,12 @@ Flyway V1–V4 run automatically. PostgreSQL constraints enforce identity, quant
 | vehicles | Depot, driver identity, both capacities, availability, fuel litres/km-per-litre, optional setpoints |
 | orders | Outlet, creator, date, temperature, status, optimistic version, schedule explanation, source boundary |
 | order_lines | Unique product per order; distinct ordered/loaded/delivered/received quantities |
-| runs | One order/stop; vehicle/day/trip, loader, plan v1, departure/depot return, fuel reservation, manual reason, acknowledgements/releases/arrival |
+| runs | Stable per-order handoff; optional parent route_trip_id, versioned plan, loader, releases/shortage approval/proof state |
+| planning_days / plan_revisions | Locked depot/date version; immutable submitted and validated snapshots and author/time |
+| route_trips | Unique vehicle/date/slot 1–2; plan revision, loader, road geometry/metrics, return, fuel and booklet minutes |
+| route_stops | Unique order/run; ordered delivery and reverse loading sequence, arrival/wait/service, stable stop UUID |
+| routing_points | Private coordinates with provenance and mandatory supplemental flag |
+| scenario_fleet | Source scenario vehicle availability; workshop vehicles cannot be proposed/published |
 | loading_issues | Line/run shortage or damage, quantity, creator/time |
 | proofs | Accepted order proof, driver, validated image bytes/type, capture/acceptance times |
 | receipts | Order/account, receiving issue, acceptance time |
@@ -30,4 +35,4 @@ Progression: RECEIVED → SCHEDULED → LOADING → RELEASED → IN_TRANSIT → 
 
 Expected receipt quantity derives from delivered, then loaded, then ordered. A known loading shortage does not itself become a new receiving discrepancy. Further delivery/receiving shortfalls require reasons.
 
-Pending: ordered multi-stop plans, editable plan versions/snapshots, planning jobs, availability history, location events, receipt damage attachments and source products/setpoints/geographies. Current plan_version=1 does not implement full plan history. Source setpoint nulls remain unknown.
+Source orders retain source_ref, scenario, exact aggregate kg/m³, days since service and previous-day skip flag. Source-unit product lines preserve aggregate quantities; they do not claim source SKU detail. Supplemental judge cold ranges and private road points carry explicit provenance. Trip starts atomically move every released handoff into transit; arrival respects earlier stops. Deferrals retain owner/reason/next day and source skip baseline. Published membership stays fixed; untouched stop order/timing may be revised. Planning jobs, live locations, receipt damage attachments and full deferred-order rescheduling remain future work.

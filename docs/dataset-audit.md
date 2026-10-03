@@ -42,7 +42,7 @@ Training statuses: 90,351 attempted, 1,543 deferred, 413 not_run. The 413 not_ru
 - **Task 2B:** scenario, order_ref, outlet_id, brand, district, depot, dock_type, parking_constraint, mall_window, window_open_time, window_close_time, temp_requirement, order_units, order_weight_kg, order_volume_m3, deferred_yesterday, days_since_last_served. Fleet: scenario, vehicle_id, status. Only listed available S1 vehicles may be allocated.
 - **Templates:** Task 1 delivery_id/pred_service_min/pred_late_prob; Task 2A row_id/pred_total_volume_m3/pred_chilled_volume_m3; Task 2B scenario/order_ref/outlet_id/decision/vehicle_id/trip_id.
 
-There are no coordinates, outlet names, product names, dimensions, currency/prices, contacts or chilled/frozen setpoint ranges. Source labels derive from brand + district + ID; they are not claimed source names. Imported setpoints remain null. Source driver identities are disabled, labelled unprovisioned and cannot sign in. Production publication remains blocked on verified capabilities and road routing.
+There are no coordinates, outlet names, product names, dimensions, currency/prices, contacts or chilled/frozen setpoint ranges. Labels derive from brand + district + ID, not claimed source names. The user authorised labelled supplemental judge road waypoints and cold capabilities. Private S1 preparation snaps town road points through local OSRM and declares 2–5°C chilled requirements/capabilities, retaining provenance. Source-driver identities remain disabled; judge assignments use the existing driver principal. Supplements allow road-backed judge publication, not a claim of real outlet geography or certified cold capability.
 
 ## Budget interpretation
 
@@ -52,7 +52,7 @@ Hackathon road scheduling must explicitly include return and turnaround. Do not 
 
 ## Import, fixture and future ML
 
-tools/import_network.py validates seven General Data files and generates private SQL. Source fields/IDs remain in source_records; outlets, vehicles and eligible dates project into operational tables. Spring imports transactionally after Flyway, records the digest and does not overwrite operational rows. History/test answers are not imported as live orders.
+tools/import_network.py validates seven General Data files and generates private SQL. Source fields/IDs remain in source_records; outlets, vehicles and eligible dates project into operational tables. Spring imports transactionally after Flyway and records the digest. tools/prepare_planning.py projects the 85 S1 scenario **input orders**, source fleet status and skip history into the judge workflow, preserving whole-order aggregates. Training history and answer plans are not published as live assignments. S1 is undated; 8 January 2026 is an explicit source-calendar replay date, with 9 January deferrals. Capture/audit timestamps remain actual demonstration times.
 
 The booklet describes all competition data as synthetic. Supplied competition records remain distinct from our DEMO-* entities and six judge orders. Demo products have declared kg/m³/setpoints. The October calendar and Monday Style schedule are explicit fixture assumptions. No road ETA is asserted.
 
@@ -60,4 +60,4 @@ History supports later service-time/lateness labels and weekly demand modelling.
 
 Booklet p22 restricts data publication. Raw files, generated SQL, detailed audits and PDF extracts stay gitignored and are not embedded in public images. Fresh clones need privately supplied network files prepared locally.
 
-Figma calls returned Unknown tool(figma.get_design_context); browser access also failed. Role screens/rationales/tokens have not been inspected. Exported references are still required for product UI implementation.
+The subsequent Figma audit succeeded through the connected account. Inspected role screens, tokens and recorded departures are documented in design-departures.md.

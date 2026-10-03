@@ -1,6 +1,6 @@
 # Waypoint Group
 
-The first online delivery milestone connects four authenticated roles to persisted PostgreSQL operations: order, assigned publication, loading check and approved partial release, driver arrival/photo, and distinct store receipt. The React PWA also retains account-scoped driver proof offline and sends same-stop conflicts for dispatcher review. This is a synthetic judge environment; operational routing and Datathon model integration remain pending. See [implementation status](docs/implementation-status.md).
+Waypoint connects four authenticated roles to PostgreSQL operations, with dataset-backed multi-stop planning, local OSRM road routes, Spring validation, versioned publication, approved shortages, driver proof and distinct store receipts. Python proposes whole-order allocations; Spring checks every constraint again before publishing. Driver proof survives offline reload and same-stop conflict review. ML remains deferred to the Datathon. See [implementation status](docs/implementation-status.md).
 
 ## Start locally
 
@@ -24,16 +24,32 @@ These are synthetic judge accounts at Peliyagoda, with server-enforced scopes an
 
 ## Private challenge reference
 
-Source data is optional for the executable synthetic walkthrough. The user supplied the booklet and dataset locally and deferred ML integration to the separate Datathon phase. Competition files and generated import SQL are gitignored. To prepare the seven GeneralData CSVs privately:
+The dataset judge walkthrough requires the supplied private files. Competition files, derived order rows, waypoint mappings and generated SQL stay gitignored. From the repository root, with Docker Desktop running:
 
 ```powershell
-./tools/prepare-data.ps1 -SourceDirectory 'C:\Users\lakit\Downloads\data-20260928T081315Z-1-001\data'
-docker compose restart core
+./tools/prepare-data.ps1 -SourceDirectory 'C:\private\challenge\data'
+./tools/prepare-routing.ps1
+docker compose --profile routing up -d osrm
+./tools/prepare-planning-data.ps1 -SourceDirectory 'C:\private\challenge\data'
+docker compose --profile routing up --build -d --wait
 ```
 
-The startup importer validates a SHA-256 digest and imports once transactionally. Source driver identities are disabled. Supplied operating dates end in June 2026; October 2026 demo dates/products/setpoints are explicitly synthetic. Source publication stays blocked until coordinates, cold ranges and road feasibility are verified. See [dataset audit](docs/dataset-audit.md) and [policies](docs/constraints-and-policies.md).
+Preparation imports the seven General Data files and all 85 Task 2B S1 orders with their source IDs, aggregate units/kg/m³, windows and previous-day history; 38 scenario vehicle statuses are retained. The source has no outlet coordinates, SKU breakdown or refrigerated setpoints. The user authorised **labelled supplemental judge road waypoints and cold capabilities**: town road points are snapped by local OSRM, and chilled requirements/capabilities are declared 2–5°C. These do not claim actual outlet locations or certified fleet ranges. Each source order is one aggregate source-unit line, not an invented SKU catalogue. Source driver accounts remain disabled; the existing judge driver login represents the provisioned source fleet for role demonstrations.
+
+S1 is undated. Its consistent planning simulation date is **8 January 2026**, a supplied operating day; deferrals use 9 January. All trips use Asia/Colombo. Proof capture and audit timestamps report the actual demonstration time separately. The dated Sri Lanka OSM extract and OSRM image digest/checksums are recorded privately in `data/osrm/provenance.json`. This is a replay scenario, not a live historical traffic reconstruction. See [dataset audit](docs/dataset-audit.md) and [policies](docs/constraints-and-policies.md).
 
 ## Judge walkthrough
+
+1. Dispatcher: open **Dataset multi-stop planning**, day `2026-01-08`, and choose **Propose judge scenario** on fresh/reset state. This selects the multi-stop Fresh dry, separate chilled, mall and excess-demand cases. The queue shows source orders, kg/m³, unloading/windows and skip history. You can also select other compatible orders or propose all demand. Review actual road timing, both capacity bars, fuel litres, violations and deferred reasons before publishing.
+2. For a focused reproducible scenario, `node tools/dataset-walkthrough.mjs` publishes two feasible multi-stop trips plus a separate chilled trip, including the same Fresh outlet's dry/chilled orders, van-only access, a fixed mall window and a genuine excess-volume deferral. It also checks competing/stale publication and completes the dry trip through all four roles, with shortage and retained-proof recovery. Run after the explicit judge reset; it deliberately rejects already-used scenario state.
+3. Loader: select a source assignment. Follow the displayed reverse loading sequence; count every stop, record a shortage if necessary, obtain dispatcher approval and release every stop. Driver departure is held until the complete trip is released.
+4. Driver: acknowledge the trip once, then follow the published stop sequence. Arrive, capture a JPEG/PNG and save proof. Store manager confirms actual received quantities separately. A known approved shortage remains part of that order.
+5. Offline branch: at an arrived source stop, reload once online, disconnect/reload, then capture proof. A dispatcher deferral of that same stop creates a retained conflict on reconnect; authorised review recovers delivery without erasing the deferral. Existing proof action UUIDs and per-order versions remain stable across the trip.
+6. Manual adjustments use the same server validator. Untouched published manifests can be reordered or retimed with a new plan version; a manifest is locked as soon as loading begins. Moving whole orders between proposed trips invalidates prior validation until checked again.
+
+OSRM failure blocks proposals and publication with `ROUTING_UNAVAILABLE`; unreachable roads return `ROUTING_UNREACHABLE`. Repair the mapping/service and retry. There is no straight-line fallback. OSRM uses its car road profile, without live traffic, truck height/weight restrictions or certified cold-chain telemetry.
+
+## Legacy workflow regression
 
 Use separate browser profiles for each account. At phone size use approximately 390 px for loader and driver.
 
@@ -45,31 +61,31 @@ Use separate browser profiles for each account. At phone size use approximately 
 6. Offline branch: prepare a second assignment using Demo Van on that date. Start/arrive while online, reload once online so the PWA controls the page, disconnect and reload. Save a photo. “Saved on device · pending sync” survives another reload. Dispatcher defers **that same stop** with a reason/next day. Reconnect the driver. Both records are preserved for review; dispatcher views evidence and accepts verified delivery or keeps the server decision. Acceptance creates a receipt task and retains deferral history.
 7. Tech branch: place a television order, complete its handoffs, and record Damaged packaging or Damaged product at receipt. The issue is persisted separately from driver proof. Receipt-specific photo capture is pending.
 
-A used vehicle/date may already have reservations; choose another date or the explicit reset below. Style uses demo Monday delivery days and van-only mall access. Full mall-window recovery comparison is pending road integration.
+A used vehicle/date may already have reservations; choose another date or the explicit reset below. Style uses Mondays only in legacy DEMO fixtures; source Style orders use source operating days. Comparing alternative mall recovery plans remains future work.
 
 ## Explicit demo reset
 
-This deletes **demo order history and evidence** from the selected Compose project; it retains accounts and source network/imports. Stop active role actions first. Never use it on an operational database.
+This deletes **DEMO and imported S1 judge order history/evidence and their plans** from the selected Compose project; it retains accounts, source network, raw source records, waypoint mappings and unrelated operational orders. Stop active role actions first. Never use it on an operational database.
 
 ```powershell
 Get-Content tools/reset-demo.sql -Raw | docker compose exec -T db sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"'
 docker compose restart core
 ```
 
-Restart creates the six stable scenario orders again. Browser evidence remains scoped to its original account; use fresh browser profiles after a server reset to avoid replaying old fixture actions.
+Restart restores the six legacy fixtures and 85 S1 orders when the private planning import is present. Browser evidence remains account scoped; use fresh profiles after a server reset to avoid replaying old actions.
 
 ## Development and checks
 
-React/TypeScript/Vite, Tailwind, shadcn-style Button/CVA, TanStack Query, Workbox and Dexie; Spring Boot/Java 21; FastAPI with OR-Tools/LightGBM dependencies; PostgreSQL/PostGIS, Redis and optional OSRM. Kafka is deferred.
+React/TypeScript/Vite, Tailwind, shadcn-style Button/CVA, TanStack Query, Workbox and Dexie; Spring Boot/Java 21; FastAPI assisted insertion; PostgreSQL/PostGIS, Redis and OSRM. ML dependencies remain deferred with ML integration; Kafka is absent.
 
 Frontend: `cd apps/web; npm ci; npm run dev` proxies `/api` to port 8081. Backend: Java 21/Maven, `cd services/core; mvn verify -Pintegration` uses disposable Testcontainers PostgreSQL (Docker required). Planning: Python 3.12, install requirements then `python -m pytest`.
 
-With the stack running, `node tools/online-walkthrough.mjs` verifies HTTP security/handoffs/replay/recovery. `cd apps/web; npx playwright install chromium; npm run test:e2e` exercises actual four-role UI, phone layouts and offline reload. These add synthetic orders. Use `WAYPOINT_URL` for a different local endpoint. See [verification](docs/verification.md) for actual results, [architecture](docs/architecture.md), [schema](docs/data-model.md), and [API walkthrough](docs/api-walkthrough.md).
+With the stack running, `node tools/online-walkthrough.mjs` verifies HTTP security/handoffs/replay/recovery using legacy fixtures. `cd apps/web; npx playwright install chromium; npm run test:e2e` exercises source multi-stop planning, four-role UI, phone layouts and offline reload, plus two legacy regressions. The source browser scenario requires fresh/reset S1 state and explicitly skips if private inputs are absent; the legacy scenarios create synthetic regression orders. Use `WAYPOINT_URL` for a different local endpoint. See [verification](docs/verification.md) for actual results, [architecture](docs/architecture.md), [schema](docs/data-model.md), and [API walkthrough](docs/api-walkthrough.md).
 
 ## Design and submission
 
 [Figma reference](https://www.figma.com/design/gWapWGfw3V1dhKLlMKSwxG/Waypoint_Designathon--Copy-?node-id=2303-146). Role screens/tokens/rationales were inspected through the connected Figma account. The interface uses the submitted DM Sans typography, brand identity, day/night tokens and product/quantity handoffs, with a phone loader adaptation. Significant scope and fidelity departures are recorded in [design departures](docs/design-departures.md).
 
-Automatic allocation, editable multi-stop plans, OSRM maps, live GPS, forecasting and full mall recovery remain pending. Planning deliberately returns unavailable rather than invented solver results. OSRM requires a prepared licensed Sri Lanka extract in data/osrm; enabling the routing profile alone does not prepare it.
+Allocation uses deterministic feasible insertion, without claiming optimality. Deferred orders retain a next-day commitment; later replacement orders remain manual. Published manifest membership/vehicle changes, map rendering, live GPS, forecasting and alternative mall recovery comparisons remain future work. OSRM requires the prepared extract; enabling its profile alone does not prepare it.
 
 Public HTTPS hosting, team naming, repository URL confirmation and the human-recorded unlisted 5–8 minute video remain submission actions. Keep the existing repository name until TeamName is supplied. See [submission guide](docs/submission-guide.md).

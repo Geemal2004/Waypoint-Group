@@ -8,9 +8,9 @@ Significant departures for this first milestone:
 
 - Authentication is an added scoped login form; prototype role-selection presentation is not an authorization mechanism.
 - Dispatcher consolidates planning/decisions into one functional workspace. Navigation entries for unimplemented forecasts/maps are omitted. There is no pixel-perfect equivalence to every submitted screen.
-- Loader adapts tablet panels to a 390 px phone. One-stop fixture plans have no reverse-stop sequence; multi-stop routing is pending.
-- Prototype product names, amounts, stock suggestions and times are replaced by persisted synthetic products and actual quantities. Currency totals and road ETAs are omitted because their source contracts are unavailable.
-- Scheduling shows declared synthetic reservations and known outlet windows, not a claimed feasible road route. Mall-window risk/alternative comparisons remain pending.
+- Loader adapts tablet panels to a 390 px phone. Source trips now expose ordered stops and reverse loading sequence while preserving per-order quantity and shortage controls.
+- Prototype product names/amounts are replaced by source aggregate order units with actual persisted handoff quantities. Source files have no SKU breakdown or prices, so aggregate lines and no currency totals are deliberate. Legacy demo catalogue controls remain for regression.
+- The dispatcher has a functional dataset queue, assisted allocation and manual trip/stop controls rather than complete prototype screen parity. OSRM timing includes waits and source service, with kg/m³ bars, fuel, failures and deferrals. Mall-window alternatives are not ranked. Supplemental town waypoints and 2–5°C judge capabilities are visibly labelled; actual source outlet geography/cold certification remain unavailable.
 - Driver photo uses native camera/file capture and survives local reload. Receiver signature capture, external navigation and live GPS are pending. Actions require safely stopped use.
 - Manager Fresh/Style/Tech use a shared branded order/receipt implementation. Tech receipt issues persist, but receipt-specific damage photos and the full accepted-issue recovery view are pending.
 - Offline server decisions are labelled cached. Same-stop conflicts retain evidence and the server deferral, with dispatcher review and account-scoped recovery polling.

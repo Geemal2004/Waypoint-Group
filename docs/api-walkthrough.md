@@ -2,6 +2,8 @@
 
 This verifies the implemented backend milestone; it does not replace the required judge web interfaces.
 
+Dataset judge: prepare the private imports and local OSRM, explicitly reset judge state, then run `node tools/dataset-walkthrough.mjs`. GET `/planning?day=2026-01-08` supplies orders, fleet, current version and published manifests. POST `/planning/propose` sends day/orderIds; Spring supplies the OSRM matrix to Python and independently validates the returned proposal. POST `/planning/validate` accepts a plan with day, expectedPlanVersion, trips (vehicleId, trip, loaderId, departureAt, ordered orderId/expectedVersion stops), deferred decisions and reason. POST `/planning/publish` reroutes and revalidates under locks, persists an immutable revision and atomically publishes all handoffs/deferrals. Geometry/metrics are returned in validation; wrong versions cannot publish. For reordering, supply existingTripId and the unchanged order set, vehicle and slot. Loading locks manifest edits. Loader/driver order detail includes shared trip/plan/stop IDs and sequences. A trip start requires every stop released and starts all handoffs; arrival enforces previous stop completion/explicit deferral.
+
 Run `node tools/online-walkthrough.mjs` (Node 22) after Compose is healthy. Optional `WAYPOINT_URL` changes the same-origin base URL. The script adds synthetic orders and selects an unused fixture day; it does not reset/delete existing data. A fixture calendar must contain a future eligible day.
 
 1. Each client GETs `/api/v1/auth/csrf`, retaining JSESSIONID, then POSTs form username/password to `/auth/login` with the returned CSRF header. Fetch a new token after login. `/auth/me` reports authenticated account/role.
@@ -16,4 +18,4 @@ Order handoffs and conflict resolutions carry current expectedVersion; order cre
 
 Proof: JPEG/PNG up to 5 MiB and 20 megapixels, actual media type validated. Filenames do not determine storage paths. Evidence requires permitted account scope and is returned with no-store/nosniff headers.
 
-Seeded manager scope is exactly DEMO-FRESH, DEMO-STYLE and DEMO-TECH at Peliyagoda. DEMO-OUTSIDE is deliberately denied. Source-driver identities have no usable login and are disabled. Source-network publication requires the missing road/setpoint contracts and is rejected rather than presented as feasible.
+Legacy manager scope includes DEMO-FRESH/STYLE/TECH and excludes DEMO-OUTSIDE. Private S1 preparation explicitly adds its source outlets to that judge account. Source-driver identities remain disabled; the provisioned judge principal represents the source fleet. Source plans require private supplemental coordinates/cold declarations and actual local OSRM. Unprepared, unreachable or failed routes cannot publish.

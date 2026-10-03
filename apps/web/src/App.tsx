@@ -253,7 +253,8 @@ export function App() {
             Planning & handoffs
           </div>
           <p className="sidebar-note">
-            Routing, forecasts and multi-stop editing are pending integration.
+            Road-backed plans and ordered handoffs. Forecasting is deferred to
+            the Datathon.
           </p>
           <div className="sidebar-account">
             <img src={avatar} alt="" />
