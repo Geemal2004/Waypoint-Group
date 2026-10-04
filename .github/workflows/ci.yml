@@ -53,8 +53,12 @@ jobs:
       - run: npm ci && npx playwright install --with-deps chromium
         working-directory: apps/web
       - run: docker compose up --build -d --wait
+      - name: Verify authenticated API handoffs and replay recovery
+        run: node tools/online-walkthrough.mjs
       - run: npm run test:e2e
         working-directory: apps/web
+        env:
+          PUBLIC_CI_FIXTURES: 'true'
       - name: Capture service diagnostics
         if: failure()
         run: mkdir -p tmp && docker compose logs --no-color > tmp/ci-compose.log

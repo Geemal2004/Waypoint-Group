@@ -124,6 +124,10 @@ test("source multi-stop online handoff, approved shortage and durable offline co
     const context = await call(d, "/planning?day=2026-01-08"),
       first = context.orders.find((o: any) => o.source_ref === sourceFirst),
       second = context.orders.find((o: any) => o.source_ref === sourceSecond);
+    test.skip(
+      !context.orders.some((o: any) => o.source_ref?.startsWith("S1-")),
+      "Private S1 inputs are absent; run this scenario in the private judge environment",
+    );
     expect(
       first,
       "Prepare private S1 and reset the isolated judge database",
@@ -284,6 +288,11 @@ test("reviewed store drafts produce a versioned multi-stop road journey with liv
   const { contexts, pages } = await roles(browser);
   const [m, d, l, v] = pages;
   try {
+    const catalog = await call(m, "/catalog");
+    test.skip(
+      !catalog.outlets.some((o: any) => o.id === "OUT001"),
+      "Private source network and prepared OSRM are required for this scenario",
+    );
     const day = process.env.JUDGE_OPERATING_DAY || "2026-10-06",
       rescheduleDay = process.env.JUDGE_RESCHEDULE_DAY || "2026-10-07",
       created = [];
@@ -488,6 +497,108 @@ test("reviewed store drafts produce a versioned multi-stop road journey with liv
       1,
     );
     await noOverflow(d);
+  } finally {
+    for (const c of contexts) await c.close();
+  }
+});
+
+test("public regression fixture retains offline proof and resolves a same-stop conflict", async ({
+  browser,
+}) => {
+  test.skip(
+    process.env.PUBLIC_CI_FIXTURES !== "true",
+    "Enable PUBLIC_CI_FIXTURES only against an isolated public-fixture database",
+  );
+  const { contexts, pages } = await roles(browser);
+  const [m, d, l, v] = pages;
+  try {
+    const day = "2026-10-10";
+    let order = await call(m, "/orders", {
+      outletId: "DEMO-FRESH",
+      day,
+      items: [{ productId: "DEMO-RICE", quantity: 4 }],
+    });
+    order = await call(d, `/orders/${order.id}/publish`, {
+      expectedVersion: order.version,
+      vehicleId: "DEMO-VAN",
+      loaderId: "DEMO-LOADER",
+      trip: 1,
+      departureAt: `${day}T00:00:00Z`,
+      returnAt: `${day}T02:00:00Z`,
+      estimatedFuelL: 5,
+      reason:
+        "Public CI regression fixture; no operational road feasibility claim",
+    });
+    order = await call(l, `/orders/${order.id}/loading`, {
+      expectedVersion: order.version,
+      lines: [{ lineId: order.lines[0].id, quantity: 4 }],
+      reason: "NONE",
+    });
+    order = await call(l, `/orders/${order.id}/release`, {
+      expectedVersion: order.version,
+    });
+    order = await call(v, `/orders/${order.id}/start`, {
+      expectedVersion: order.version,
+    });
+    order = await call(v, `/orders/${order.id}/arrive`, {
+      expectedVersion: order.version,
+    });
+    await v.reload();
+    await assigned(v, "Assigned stop", order.id);
+    await expect(v.getByLabel("Delivery photo", { exact: true })).toBeVisible();
+    await v.evaluate(async () => {
+      await navigator.serviceWorker.ready;
+    });
+    await v.reload();
+    await assigned(v, "Assigned stop", order.id);
+    await expect(v.getByLabel("Delivery photo", { exact: true })).toBeVisible();
+    await contexts[3].setOffline(true);
+    await v.reload();
+    await assigned(v, "Assigned stop", order.id);
+    await proof(v);
+    await v.reload();
+    await v.getByRole("button", { name: "Sync", exact: true }).click();
+    await expect(
+      v.getByText(`${order.reference} · Saved on device · pending sync`, {
+        exact: true,
+      }),
+    ).toBeVisible();
+    await call(d, `/orders/${order.id}/defer`, {
+      expectedVersion: order.version,
+      nextDay: "2026-10-12",
+      reason:
+        "CI same-stop conflict while physical proof remains on the device",
+    });
+    await contexts[3].setOffline(false);
+    await expect(
+      v.getByText(`${order.reference} · Conflict needs review`, {
+        exact: true,
+      }),
+    ).toBeVisible();
+    const conflict = (await call(d, "/sync-conflicts")).find(
+      (c: any) => c.order_id === order.id,
+    );
+    expect(conflict).toBeTruthy();
+    await d.getByRole("button", { name: "History", exact: true }).click();
+    await d
+      .getByLabel("Resolution reason")
+      .fill("CI verified retained evidence; preserve deferral history");
+    await d
+      .getByRole("button", { name: "Accept verified delivery", exact: true })
+      .click();
+    await v.getByRole("button", { name: "Retry sync", exact: true }).click();
+    await expect(
+      v.getByText(`${order.reference} · Accepted by server`, { exact: true }),
+    ).toBeVisible();
+    await store(m, order.outlet_id, order.reference);
+    await m
+      .getByRole("button", { name: "Confirm received", exact: true })
+      .click();
+    await expect
+      .poll(async () => (await call(m, `/orders/${order.id}`)).status)
+      .toBe("RECEIVED_AT_STORE");
+    expect((await call(m, `/orders/${order.id}`)).deferrals).toHaveLength(1);
+    await noOverflow(v);
   } finally {
     for (const c of contexts) await c.close();
   }
