@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
-: "${LIGHTSAIL_SSH_KEY:?Set the competition environment SSH key secret}"
-: "${LIGHTSAIL_KNOWN_HOSTS:?Set the verified competition host key secret}"
+: "${LIGHTSAIL_SSH_KEY:?Set the SSH_PRIVATE_KEY repository secret}"
 : "${LIGHTSAIL_HOST:?Missing host}"
 : "${LIGHTSAIL_USER:?Missing user}"
 [[ "$GITHUB_SHA" =~ ^[a-f0-9]{40}$ ]]
@@ -10,10 +9,10 @@ set -euo pipefail
 ssh_dir="$(mktemp -d)"
 trap 'rm -rf -- "$ssh_dir"' EXIT
 chmod 700 "$ssh_dir"
-printf '%s\n' "$LIGHTSAIL_SSH_KEY" > "$ssh_dir/key"
-printf '%s\n' "$LIGHTSAIL_KNOWN_HOSTS" > "$ssh_dir/known_hosts"
+printf '%s\n' "$LIGHTSAIL_SSH_KEY" | tr -d '\r' > "$ssh_dir/key"
+cp deploy/lightsail/known_hosts "$ssh_dir/known_hosts"
 chmod 600 "$ssh_dir/key" "$ssh_dir/known_hosts"
-unset LIGHTSAIL_SSH_KEY LIGHTSAIL_KNOWN_HOSTS
+unset LIGHTSAIL_SSH_KEY
 ssh_options=(-i "$ssh_dir/key" -o BatchMode=yes -o StrictHostKeyChecking=yes -o "UserKnownHostsFile=$ssh_dir/known_hosts" -o ConnectTimeout=15 -o ServerAliveInterval=30 -o ServerAliveCountMax=6)
 archive="tmp/releases/$GITHUB_SHA/waypoint-source.tar.gz"
 test -s "$archive"

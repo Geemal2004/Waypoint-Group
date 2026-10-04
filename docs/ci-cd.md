@@ -2,14 +2,17 @@
 
 `.github/workflows/ci.yml` runs on pushes, pull requests and manual dispatches. The web job builds TypeScript/Vite, core runs Java 21 unit and real PostgreSQL Testcontainers integration tests, planning runs Python tests, and browser builds an isolated Compose stack and runs Playwright. Failures retain browser evidence and service logs. Private source files are absent on GitHub runners, so the dataset-dependent browser case explicitly skips; run that walkthrough separately against reviewed private inputs. CI does not claim full private-dataset or physical-device coverage.
 
-Only successful `main` push/manual runs deploy. All four jobs must pass. Pull requests and other branches cannot access deployment credentials. The GitHub `competition` environment should restrict deployments to the `main` branch. Configure these environment secrets in repository Settings → Environments → competition:
+Only successful `main` push/manual runs deploy. All four jobs must pass. This workflow passes deployment credentials only to the deployment job; that job never runs for pull requests or other branches. The GitHub `competition` environment restricts deployments to `main`. Configure these repository secrets in Settings → Secrets and variables → Actions:
 
 | Secret | Value |
 | --- | --- |
-| `LIGHTSAIL_SSH_KEY` | Private SSH key authorized for ubuntu on the competition instance. Prefer a dedicated deployment key. |
-| `LIGHTSAIL_KNOWN_HOSTS` | Previously verified `18.138.29.235 ssh-ed25519 ...` known-host entry. Never acquire it blindly during deployment. |
+| `SSH_PRIVATE_KEY` | Entire private SSH key authorized for ubuntu on the competition instance. Prefer a dedicated deployment key. |
+| `SERVER_HOST` | `18.138.29.235` |
+| `SERVER_USER` | `ubuntu` |
 
-Environment secrets are GitHub-encrypted; workflow editors with access to trusted deployment code can still exercise that server access. Restrict repository write access. See [GitHub environment guidance](https://docs.github.com/en/actions/how-tos/deploy/configure-and-manage-deployments/manage-environments).
+The verified public ED25519 host key is pinned in `deploy/lightsail/known_hosts`; it is not a private credential. SSH fails if the server key changes. Verify any replacement independently before updating it.
+
+Repository secrets are GitHub-encrypted but are available to other trusted workflows in this repository. Workflow editors can exercise that server access. Restrict repository write access; environment-scoped secrets can provide tighter deployment isolation later. See [GitHub environment guidance](https://docs.github.com/en/actions/how-tos/deploy/configure-and-manage-deployments/manage-environments).
 
 Deployment packages the exact checked commit with `tools/package-release.ps1`, checks for restricted paths, uploads source only, verifies its checksum, and invokes the existing Lightsail release script. SSH host checking is strict. Private datasets, OSRM files, cloud credentials and PostgreSQL state stay on the server. The release script backs up existing PostgreSQL before migration, builds serially for the 4 GB instance, checks service/OSRM/HTTPS health and advances `/opt/waypoint/current` only after success. Deployments do not cancel an active deployment and the server also holds a deployment lock.
 
