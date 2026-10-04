@@ -30,20 +30,24 @@ public class PlanningService {
     }
     private void dispatcher(Account a) { if(!a.role().equals("DISPATCHER"))throw new ApiException(403,"ROLE_REQUIRED","Dispatcher access required."); }
     private Map<String,Object> one(String sql,Object... args) {
+        return requiredRow("Required planning data is absent or outside your depot.",sql,args);
+    }
+    private Map<String,Object> requiredRow(String message,String sql,Object... args) {
         var rows=db.queryForList(sql,args);
-        require(rows.size()==1,"PLANNING_DATA_MISSING","Required planning data is absent or outside your depot.");
+        require(rows.size()==1,"PLANNING_DATA_MISSING",message);
         return rows.getFirst();
     }
     private double n(Map<String,Object> m,String key) { return ((Number)m.get(key)).doubleValue(); }
     private RoutingAdapter.Point point(String id) {
-        var p=one("select * from routing_points where point_id=?",id);
+        var p=requiredRow("Road waypoint is missing for "+id+". Configure a reviewed routing point before planning.","select * from routing_points where point_id=?",id);
         return new RoutingAdapter.Point(id,n(p,"longitude"),n(p,"latitude"),(String)p.get("provenance"),(Boolean)p.get("supplemental"));
     }
     private Map<String,Object> order(Account a,UUID id) {
         return one("select o.*,t.brand_code,t.depot_code,t.district,t.access,t.window_start,t.window_end,t.dock_type from orders o join outlets t on t.id=o.outlet_id where o.id=? and t.depot_code=?",id,a.depot());
     }
     private double service(Map<String,Object> o) {
-        return n(one("select (payload->>'service_allowance_min')::numeric minutes from source_records where file='service_allowance.csv' and upper(payload->>'brand')=? and payload->>'dock_type'=?",o.get("brand_code"),o.get("dock_type")),"minutes");
+        require(o.get("dock_type")!=null,"PLANNING_DATA_MISSING","Dock type is missing for outlet "+o.get("outlet_id")+". Set its receiving dock type before planning.");
+        return n(requiredRow("Unloading allowance is missing or duplicated for "+o.get("brand_code")+" / "+o.get("dock_type")+" (outlet "+o.get("outlet_id")+"). Check the service allowance import.","select (payload->>'service_allowance_min')::numeric minutes from source_records where file='service_allowance.csv' and upper(payload->>'brand')=? and payload->>'dock_type'=?",o.get("brand_code"),o.get("dock_type")),"minutes");
     }
     private double weight(Map<String,Object> o,String key) {
         if(o.get("source_"+key)!=null) return n(o,"source_"+key);
@@ -75,7 +79,7 @@ public class PlanningService {
         payload.put("orders",selected);payload.put("matrix",routing.matrix(points));
         payload.put("fleetStatus",db.queryForList("select * from scenario_fleet"));
         payload.put("districtBudgets",db.queryForList("select payload->>'district' district,(payload->>'depot_to_district_freeflow_min')::numeric outbound,(payload->>'inter_stop_freeflow_min')::numeric inter from source_records where file='district_travel.csv'"));
-        payload.put("loaderId",one("select id from accounts where role='LOADER' and enabled and depot_code=? order by demo desc,id limit 1",a.depot()).get("id"));
+        payload.put("loaderId",requiredRow("No enabled loader is available in depot "+a.depot()+". Enable a depot loader before proposing a plan.","select id from accounts where role='LOADER' and enabled and depot_code=? order by demo desc,id limit 1",a.depot()).get("id"));
         Object nextDay=one("select min(day) as next_day from operating_days where day>? and demo=?",request.day(),selected.getFirst().get("demo")).get("next_day");
         require(nextDay!=null,"CALENDAR_EXHAUSTED","No later source operating date is available for deferrals. Extend the audited calendar first.");
         payload.put("nextDay",nextDay);

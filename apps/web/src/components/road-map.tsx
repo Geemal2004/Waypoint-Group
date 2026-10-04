@@ -36,11 +36,13 @@ export function RoadMap({
   const target = useRef<HTMLDivElement>(null),
     map = useRef<maplibregl.Map>(null);
   const selected = useRef(onSelect);
+  const currentPoints = useRef(points);
   const lastBounds = useRef("");
   const visibleBounds = useRef<maplibregl.LngLatBounds | null>(null);
   const dataKey = JSON.stringify(points),
     routeKey = JSON.stringify(geometry);
   selected.current = onSelect;
+  currentPoints.current = points;
   const [ready, setReady] = useState(false),
     [failure, setFailure] = useState("");
   useEffect(() => {
@@ -176,6 +178,23 @@ export function RoadMap({
           selected.current?.(p.id);
           const content = document.createElement("div");
           content.textContent = `${p.sequence ? `Stop ${p.sequence} · ` : ""}${p.label}${p.supplemental ? " · supplemental waypoint" : ""}${p.completed ? " · completed" : ""}`;
+          const nearby = currentPoints.current.filter((point) => {
+            const pixel = instance.project([point.longitude, point.latitude]);
+            return Math.hypot(pixel.x - e.point.x, pixel.y - e.point.y) <= 16;
+          });
+          if (nearby.length > 1) {
+            content.textContent = `${nearby.length} locations here — select one:`;
+            content.style.maxHeight = "240px";
+            content.style.overflowY = "auto";
+            for (const point of nearby) {
+              const button = document.createElement("button");
+              button.className = "text-button";
+              button.style.display = "block";
+              button.textContent = point.label;
+              button.onclick = () => selected.current?.(point.id);
+              content.appendChild(button);
+            }
+          }
           new maplibregl.Popup()
             .setLngLat(e.lngLat)
             .setDOMContent(content)

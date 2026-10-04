@@ -320,6 +320,11 @@ export function App() {
             </span>
           </div>
           <div className="header-actions">
+            {account.role === "DISPATCHER" && (
+              <span className="live-state" role="status">
+                Updates: {liveState}
+              </span>
+            )}
             <button
               className="demo-indicator"
               onClick={() => setDemoInformation(true)}
@@ -355,11 +360,6 @@ export function App() {
           </div>
         </header>
         <main className="page-content">
-          {account.role === "DISPATCHER" && (
-            <span className="live-state" role="status">
-              Updates: {liveState}
-            </span>
-          )}
           {
             <div className="day-toolbar">
               <span>Operating day · Asia/Colombo</span>

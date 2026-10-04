@@ -1,0 +1,667 @@
+/* Driver in-vehicle layer: see docs/driver-in-vehicle-ux-plan.md. No driver-facing text below 16px. */
+.role-DRIVER {
+  --drv-hero: clamp(2rem, 1.2rem + 3.6vw, 3rem);
+  --drv-title: clamp(1.5rem, 1.1rem + 1.8vw, 1.875rem);
+  --drv-key: clamp(1.375rem, 1.1rem + 1.2vw, 1.75rem);
+  --drv-body: clamp(1.125rem, 1.05rem + 0.4vw, 1.25rem);
+  --drv-meta: 1rem;
+  --drv-nav-h: 76px;
+  --drv-action-h: 92px;
+  --drv-safe-bottom: env(safe-area-inset-bottom, 0px);
+  --drv-bar-inline: max(16px, calc((100% - 600px) / 2));
+  font-size: var(--drv-body);
+  line-height: 1.45;
+}
+:root:not([data-theme="night"]) .role-DRIVER {
+  --muted-foreground: #44525b;
+}
+
+/* Compact sticky header */
+.role-DRIVER .app-header {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  min-height: 60px;
+  padding: 6px 16px;
+}
+.role-DRIVER .app-header strong {
+  font-size: 1.125rem;
+  letter-spacing: 0.04em;
+}
+.role-DRIVER .app-header > div:first-child {
+  max-width: none;
+  min-width: 0;
+}
+.role-DRIVER .app-header > div:first-child span {
+  margin-top: 2px;
+  font-size: var(--drv-meta);
+}
+.role-DRIVER .header-actions .badge,
+.role-DRIVER .header-actions .avatar {
+  display: none;
+}
+.role-DRIVER .icon-button {
+  width: 52px;
+  height: 52px;
+}
+.role-DRIVER .demo-indicator {
+  min-height: 44px;
+  min-width: 44px;
+  justify-content: center;
+}
+.role-DRIVER .day-toolbar {
+  margin: 4px 0 8px;
+  gap: 8px 12px;
+  flex-wrap: nowrap;
+  font-size: var(--drv-meta);
+}
+.role-DRIVER .day-toolbar span {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--drv-meta);
+}
+.role-DRIVER .day-toolbar input {
+  flex: 0 1 180px;
+  min-width: 150px;
+  min-height: 52px;
+  font-size: 1.125rem;
+}
+.role-DRIVER .page-content {
+  max-width: 600px;
+  padding: 12px 16px
+    calc(var(--drv-nav-h) + var(--drv-action-h) + var(--drv-safe-bottom) + 24px);
+}
+
+/* Type floor */
+.role-DRIVER
+  :is(
+    small,
+    .muted,
+    .badge,
+    .timeline p,
+    .timeline strong,
+    .retention,
+    .photo-label,
+    .product-copy p,
+    .driver-meta,
+    .conflict-row small
+  ) {
+  font-size: var(--drv-meta);
+}
+.role-DRIVER :is(p, li, label, .notice, summary, input, select, textarea) {
+  font-size: var(--drv-body);
+}
+.role-DRIVER .page-heading {
+  margin: 12px 0;
+}
+.role-DRIVER .page-heading h1 {
+  font-size: var(--drv-title);
+  line-height: 1.2;
+}
+.role-DRIVER .panel {
+  padding: 20px;
+  border-radius: 12px;
+}
+.role-DRIVER .panel h2 {
+  font-size: var(--drv-title);
+  line-height: 1.2;
+}
+.role-DRIVER h3 {
+  font-size: 1.25rem;
+}
+.role-DRIVER label {
+  font-weight: 600;
+}
+.role-DRIVER :is(input, select) {
+  min-height: 56px;
+  border-width: 2px;
+  border-radius: 10px;
+}
+.role-DRIVER summary {
+  min-height: 56px;
+  display: flex;
+  align-items: center;
+}
+.role-DRIVER .notice {
+  padding: 16px 18px;
+}
+
+/* Touch targets */
+.role-DRIVER .button {
+  min-height: 56px;
+  font-size: 1.125rem;
+  border-radius: 10px;
+}
+.role-DRIVER .button-link {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  min-height: 56px;
+  font-size: 1.125rem;
+}
+.role-DRIVER .counter button,
+.role-DRIVER .counter input {
+  width: 60px;
+  min-width: 60px;
+  height: 60px;
+  min-height: 60px;
+}
+.role-DRIVER .counter {
+  height: auto;
+  border-width: 2px;
+  border-radius: 10px;
+}
+.role-DRIVER .counter input {
+  font-size: 1.5rem;
+}
+.role-DRIVER .proof-draft-review input[type="checkbox"] {
+  flex-basis: 28px;
+  width: 28px;
+  height: 28px;
+  min-height: 28px;
+}
+
+/* Bottom navigation in the thumb zone */
+.role-DRIVER .driver-bottom-nav {
+  position: fixed;
+  inset: auto 0 0;
+  z-index: 40;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 4px;
+  margin: 0;
+  padding: 6px var(--drv-bar-inline) calc(6px + var(--drv-safe-bottom));
+  background: var(--card);
+  border-top: 1px solid var(--border);
+  box-shadow: 0 -6px 24px #17262f14;
+}
+.role-DRIVER .driver-bottom-nav .button {
+  position: relative;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  min-height: 64px;
+  padding: 6px 2px;
+  border: 0;
+  border-radius: 10px;
+  background: none;
+  color: var(--muted-foreground);
+  font-size: var(--drv-meta);
+  line-height: 1.15;
+  text-align: center;
+}
+.role-DRIVER .driver-bottom-nav .button[aria-current="page"] {
+  background: var(--action-soft);
+  color: var(--primary);
+  font-weight: 700;
+}
+.role-DRIVER .driver-bottom-nav .button[aria-current="page"]::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 30%;
+  right: 30%;
+  height: 4px;
+  border-radius: 0 0 4px 4px;
+  background: var(--primary);
+}
+.driver-nav-badge {
+  position: absolute;
+  top: 2px;
+  left: calc(50% + 6px);
+  min-width: 24px;
+  height: 24px;
+  padding: 0 6px;
+  border-radius: 12px;
+  background: var(--warning);
+  color: var(--card);
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 24px;
+}
+
+/* One primary action, always in the same place */
+.role-DRIVER .driver-action-bar,
+.role-DRIVER .sticky-action {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: calc(var(--drv-nav-h) + var(--drv-safe-bottom));
+  z-index: 35;
+  margin: 0;
+  padding: 12px var(--drv-bar-inline);
+  background: var(--card);
+  border-top: 1px solid var(--border);
+  box-shadow: 0 -6px 20px #17262f12;
+}
+.role-DRIVER .driver-action-bar .button,
+.role-DRIVER .sticky-action .button {
+  width: 100%;
+  min-height: 64px;
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+.role-DRIVER .driver-action-bar .button:disabled,
+.role-DRIVER .sticky-action .button:disabled {
+  opacity: 1;
+  background: var(--muted);
+  color: var(--foreground);
+  border: 2px dashed var(--muted-foreground);
+}
+.role-DRIVER .sticky-action small {
+  margin-bottom: 6px;
+}
+
+/* Status banner: icon + word + colour */
+.driver-sync-banner {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  align-items: center;
+}
+.driver-sync-banner > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.role-DRIVER .driver-sync-banner {
+  margin: 8px 0 16px;
+  padding: 12px 16px;
+  font-size: 1.125rem;
+  border-left: 5px solid var(--primary);
+}
+.role-DRIVER .driver-sync-banner.offline {
+  background: var(--warning-soft);
+  color: var(--foreground);
+  border-left-color: var(--warning);
+}
+.role-DRIVER .driver-sync-banner.review {
+  background: var(--critical-soft);
+  color: var(--foreground);
+  border-left-color: var(--critical);
+}
+
+/* Trip overview */
+.driver-trip-progress strong {
+  font-size: var(--drv-key);
+}
+.role-DRIVER .driver-trip-overview progress {
+  width: 100%;
+  height: 14px;
+  accent-color: var(--success);
+}
+
+/* Trip and stop choices: the whole card is the radio target */
+.driver-choice-list {
+  display: grid;
+  gap: 10px;
+  margin: 0 0 20px;
+}
+.role-DRIVER label.driver-choice {
+  position: relative;
+  flex-direction: row;
+  align-items: center;
+  gap: 14px;
+  margin: 0;
+  min-height: 72px;
+  padding: 12px 16px;
+  border: 2px solid var(--border);
+  border-radius: 12px;
+  background: var(--card);
+}
+.driver-choice > span,
+.driver-stop-copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.driver-choice strong,
+.driver-stop-copy strong {
+  font-size: 1.25rem;
+  overflow-wrap: anywhere;
+}
+.driver-choice svg {
+  flex-shrink: 0;
+  color: var(--primary);
+}
+.driver-choice input,
+.driver-stop-row input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.role-DRIVER .driver-choice.selected,
+.role-DRIVER .driver-stop-row.selected {
+  border-color: var(--primary);
+  background: var(--action-soft);
+}
+.role-DRIVER .driver-choice:has(input:focus-visible),
+.role-DRIVER .driver-stop-row:has(input:focus-visible) {
+  outline: 3px solid var(--primary);
+  outline-offset: 2px;
+}
+.driver-stop-list {
+  display: grid;
+  gap: 10px;
+  margin: 16px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.role-DRIVER .driver-stop-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr);
+  gap: 6px 14px;
+  align-items: center;
+  min-height: 72px;
+  padding: 12px 14px;
+  border: 2px solid var(--border);
+  border-radius: 12px;
+  background: var(--card);
+}
+.driver-stop-row.inactive {
+  border-style: dashed;
+  opacity: 0.85;
+}
+.driver-stop-row .badge {
+  grid-column: 2;
+  justify-self: start;
+}
+.driver-seq {
+  grid-row: span 2;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--primary);
+  color: var(--card);
+  font-size: 1.125rem;
+  font-weight: 700;
+}
+.driver-stop-row.inactive .driver-seq {
+  background: var(--success);
+}
+.driver-shortage {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  color: var(--warning);
+}
+
+/* Stepwise delivery */
+.driver-step-heading {
+  margin: 8px 0 12px;
+}
+.role-DRIVER .driver-step-heading h2 {
+  font-size: var(--drv-title);
+  line-height: 1.2;
+}
+.role-DRIVER .driver-delivery .notice {
+  display: grid;
+  gap: 6px;
+}
+.role-DRIVER .driver-all-delivered {
+  width: 100%;
+  min-height: 72px;
+  margin-bottom: 8px;
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+.role-DRIVER .driver-or {
+  margin: 16px 0 8px;
+  color: var(--muted-foreground);
+  font-weight: 600;
+}
+.driver-issue-list {
+  margin: 12px 0 0;
+}
+.role-DRIVER .driver-issue-list .driver-choice {
+  min-height: 60px;
+}
+.driver-delivery-summary strong {
+  font-size: var(--drv-key);
+}
+.role-DRIVER .driver-delivery-summary .button {
+  width: 100%;
+}
+.role-DRIVER label.driver-camera {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  margin: 0;
+  padding: 24px 16px;
+  border: 2px dashed var(--primary);
+  border-radius: 12px;
+  background: var(--action-soft);
+  color: var(--primary);
+  font-size: 1.25rem;
+  font-weight: 700;
+  text-align: center;
+  cursor: pointer;
+}
+.role-DRIVER label.driver-camera input {
+  max-width: 100%;
+  font-size: 1rem;
+}
+.role-DRIVER .driver-delivery .proof-preview {
+  height: clamp(200px, 32vh, 320px);
+}
+
+/* Arrival confirmation sheet */
+.driver-sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background: #101b23a6;
+}
+.driver-sheet {
+  display: grid;
+  gap: 12px;
+  width: min(100%, 600px);
+  padding: 24px 20px calc(20px + var(--drv-safe-bottom));
+  border-radius: 20px 20px 0 0;
+  background: var(--card);
+  box-shadow: 0 -12px 40px #17262f33;
+}
+.role-DRIVER .driver-sheet h2 {
+  font-size: var(--drv-hero);
+  line-height: 1.1;
+  overflow-wrap: anywhere;
+}
+.role-DRIVER .driver-sheet .button {
+  width: 100%;
+  min-height: 64px;
+  font-size: 1.25rem;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .driver-sheet {
+    animation: driver-sheet-in 0.18s ease-out;
+  }
+}
+@keyframes driver-sheet-in {
+  from {
+    transform: translateY(24px);
+    opacity: 0;
+  }
+}
+
+/* Navigate and location sharing */
+.role-DRIVER .driver-navigate {
+  gap: 10px;
+  min-height: 64px;
+  margin: 0 0 16px;
+  background: var(--primary);
+  color: var(--card);
+  border: 0;
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+.driver-location-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.driver-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 1rem;
+  font-weight: 700;
+}
+.driver-chip.sharing {
+  background: var(--fresh-surface);
+  color: var(--success);
+}
+.driver-chip.weak {
+  background: var(--warning-soft);
+  color: var(--warning);
+}
+.driver-chip.paused {
+  background: var(--muted);
+  color: var(--muted-foreground);
+}
+
+/* Glanceable stop card */
+.driver-stop-card {
+  container-type: inline-size;
+}
+.role-DRIVER .driver-eyebrow {
+  font-size: var(--drv-meta);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--primary);
+}
+.role-DRIVER .driver-stop-card h2 {
+  margin: 4px 0 12px;
+  font-size: var(--drv-hero);
+  line-height: 1.1;
+  overflow-wrap: anywhere;
+}
+.driver-facts {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.driver-facts li {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 0;
+  border-top: 1px solid var(--border);
+}
+.driver-facts svg {
+  flex-shrink: 0;
+  color: var(--primary);
+}
+.driver-facts span {
+  display: grid;
+  font-size: var(--drv-key);
+  font-weight: 700;
+  line-height: 1.2;
+}
+.driver-facts small {
+  font-weight: 500;
+}
+@container (min-width: 440px) {
+  .driver-facts {
+    grid-template-columns: 1fr 1fr;
+    column-gap: 16px;
+  }
+}
+.driver-meta {
+  color: var(--muted-foreground);
+}
+.driver-load-lines {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.driver-load-lines li {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 56px;
+  align-items: center;
+  border-top: 1px solid var(--border);
+}
+.driver-load-lines strong {
+  font-size: var(--drv-key);
+  white-space: nowrap;
+}
+
+/* Road journey and location sharing */
+.role-DRIVER .driver-journey .road-map {
+  height: clamp(220px, 38vh, 340px);
+  border-radius: 10px;
+}
+.role-DRIVER .driver-journey > .button {
+  width: 100%;
+}
+.role-DRIVER .driver-saved-confirmation h2 {
+  font-size: var(--drv-title);
+}
+.role-DRIVER .driver-saved-confirmation > .button {
+  width: 100%;
+}
+
+/* Wide screens: keep the phone layout in a centred phone-width frame */
+@media (min-width: 768px) {
+  .role-DRIVER {
+    --drv-frame: 440px;
+    --drv-frame-inset: max(0px, calc((100% - var(--drv-frame)) / 2));
+    --drv-hero: 2.125rem;
+    --drv-title: 1.625rem;
+    --drv-key: 1.4375rem;
+    --drv-body: 1.1875rem;
+    --drv-bar-inline: 16px;
+    background:
+      radial-gradient(circle at 50% 0, var(--action-soft), transparent 60%),
+      var(--background);
+  }
+  .role-DRIVER .workspace {
+    position: relative;
+    width: var(--drv-frame);
+    min-height: 100vh;
+    margin: 0 auto;
+    background: var(--background);
+    border-inline: 1px solid var(--border);
+    box-shadow: 0 0 48px #17262f1f;
+  }
+  .role-DRIVER .driver-bottom-nav,
+  .role-DRIVER .driver-action-bar,
+  .role-DRIVER .sticky-action {
+    left: var(--drv-frame-inset);
+    right: var(--drv-frame-inset);
+  }
+  .role-DRIVER .driver-bottom-nav {
+    border-inline: 1px solid var(--border);
+  }
+  .role-DRIVER .demo-indicator {
+    font-size: 0;
+    gap: 0;
+    padding: 8px;
+  }
+  .driver-sheet {
+    width: min(100%, 440px);
+  }
+  .role-DRIVER .driver-journey .road-map {
+    height: 260px;
+  }
+}

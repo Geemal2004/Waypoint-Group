@@ -8,10 +8,12 @@ Install Docker Desktop with Compose v2, then from the repository root:
 
 ```powershell
 Copy-Item .env.example .env
-docker compose up --build -d --wait
+docker compose up
 ```
 
-Open **http://localhost:8080**. Flyway applies migrations and creates the four demo accounts and six repeatable scenario orders. PostgreSQL data persists across restarts. Core readiness: http://localhost:8081/actuator/health/readiness. Planning health/docs: http://localhost:8000/health and http://localhost:8000/docs.
+Compose builds and starts the complete default application stack: PostgreSQL/PostGIS, Redis, planning API, Spring core and web UI. Flyway applies migrations; with `DEMO_SEED=true`, startup creates the four demo accounts and six repeatable scenario orders. Open **http://localhost:8080**. PostgreSQL data persists across restarts. Core readiness: http://localhost:8081/actuator/health/readiness. Planning health/docs: http://localhost:8000/health and http://localhost:8000/docs. Use `Ctrl+C` to stop the foreground stack; `docker compose down` removes containers but preserves the database volume.
+
+Compose reads `.env` from the repository root; `.env.example` lists all supported local settings. The defaults are for local development only. `POSTGRES_DB`, `POSTGRES_USER` and `POSTGRES_PASSWORD` configure the database; `WEB_PORT`, `CORE_PORT` and `PLANNING_PORT` change loopback ports; `FRESH_ONLY_REEFERS` and `TURNAROUND_MINUTES` set planning policy; `DEMO_SEED` enables judge accounts/fixtures; `SESSION_SECURE` must stay `false` for local HTTP and be `true` behind HTTPS. The prepared OSRM road graph is private and runs only with the `routing` profile; local road-based allocation requires the private routing setup below. Without it, route-dependent planning reports routing unavailable rather than estimating straight-line routes.
 
 | Role | Username | Password |
 | --- | --- | --- |
@@ -23,6 +25,12 @@ Open **http://localhost:8080**. Flyway applies migrations and creates the four d
 These are synthetic judge accounts at Peliyagoda, with server-enforced scopes and BCrypt passwords. Default bindings are local only. The competition deployment is **https://18-138-29-235.sslip.io**; its four usernames are the same, with a private competition password in ignored `data/private/lightsail-credentials.json`. The passwords above apply only to local development.
 
 When `DEMO_SEED=true`, the sign-in page opens with a one-click role picker (Store manager for Waypoint Fresh, Style and Tech; Dispatcher; Loader; Driver) that signs judges into these demo accounts without a password. It is served by `POST /api/v1/auth/demo-login`, which only exists when demo seeding is on and only reaches `DEMO-*` accounts, so production (`DEMO_SEED=false`) shows the plain username and password form.
+
+## Local video demo for all four personas
+
+Use the regular local Compose app at **http://localhost:8080** video stack and select **2026-10-12**. Its campaign contains 37 orders, six drafts, five active road-backed trips and nine completed historical receipts across Fresh, Style and Tech. Existing orders and trips remain intact alongside the supplemental campaign.
+
+See [video seed instructions](seed/README.md) for startup, targeted reset, offline rehearsal, backup and verification. Run `node tools/prepare-video-browsers.mjs --open` to prepare four independent recording profiles. The actual WP references and private screenshots are generated under ignored `data/private/video-demo-local`; the [complete plan](docs/demo-seed-plan.md) describes the scenes.
 
 ## Private challenge reference
 
@@ -105,3 +113,5 @@ The Lightsail competition server uses [its own deployment configuration](docs/aw
 Allocation uses deterministic feasible insertion without claiming optimality. Explicit linked rescheduling works; automatic rolling rescheduling and ranked mall recovery remain pending. Published membership/vehicle reassignment remains restricted. Physical GPS/camera/background behavior, certified geography/cold ranges and traffic/truck routing require deployment validation. OSRM requires the prepared extract; enabling its profile alone does not prepare it.
 
 Competition HTTPS hosting is deployed. Team naming, repository URL confirmation and the human-recorded unlisted 5–8 minute video remain submission actions. Keep the existing repository name until TeamName is supplied. See [submission guide](docs/submission-guide.md).
+
+Submission references: [architecture diagram](docs/architecture.md#architecture), [deployment diagram and AWS recovery](docs/aws-deployment.md#deployment-architecture), [data model](docs/data-model.md), [AI tool disclosure](docs/ai-disclosure.md), [Designathon departures](docs/design-departures.md), and [verification/test results](docs/verification.md).

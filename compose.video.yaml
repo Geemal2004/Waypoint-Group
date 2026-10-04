@@ -1,0 +1,20 @@
+# Isolated local recording stack. Never uses the existing waypoint database volume.
+services:
+  core:
+    image: waypoint-core:latest
+    ports: !override
+      - '127.0.0.1:8181:8081'
+    environment:
+      DEMO_SEED: 'true'
+      SESSION_SECURE: 'false'
+  planning:
+    image: waypoint-planning:latest
+    ports: !override
+      - '127.0.0.1:8100:8000'
+  web:
+    image: waypoint-web:latest
+    ports: !override
+      - '127.0.0.1:8180:80'
+  osrm:
+    ports: !override
+      - '127.0.0.1:5100:5000'

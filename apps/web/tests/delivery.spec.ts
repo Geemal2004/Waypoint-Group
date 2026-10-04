@@ -67,16 +67,39 @@ async function assigned(p: Page, label: string, id: string) {
   if (await p.evaluate(() => navigator.onLine)) {
     const order = await call(p, `/orders/${id}`);
     await p.getByLabel("Operating day", { exact: true }).fill(order.day);
+    const trips = p.getByLabel("Assigned trip", { exact: true });
+    await p.getByLabel(label, { exact: true }).waitFor();
+    if (label === "Assigned stop" && order.run && (await trips.count()))
+      await trips
+        .locator(
+          `input[value='${JSON.stringify([order.day, order.run.route_trip_id || order.id])}']`,
+        )
+        .check();
   }
-  await expect(
-    p.getByLabel(label, { exact: true }).locator(`option[value="${id}"]`),
-  ).toHaveCount(1);
-  await p.getByLabel(label, { exact: true }).selectOption(id);
+  const choice = p
+    .getByLabel(label, { exact: true })
+    .locator(`input[value="${id}"]`);
+  await expect(choice).toHaveCount(1);
+  await choice.check();
 }
-async function proof(p: Page) {
+async function arrive(p: Page) {
+  await p.getByRole("button", { name: "I've arrived", exact: true }).click();
   await p
-    .getByLabel("Delivery photo", { exact: true })
-    .setInputFiles({ name: "proof.png", mimeType: "image/png", buffer: png });
+    .getByRole("dialog")
+    .getByRole("button", { name: "Confirm arrival", exact: true })
+    .click();
+}
+const continueToPhoto = (p: Page) =>
+  p.getByRole("button", { name: "Continue to photo", exact: true });
+async function proof(p: Page) {
+  const photo = p.getByLabel("Delivery photo", { exact: true });
+  await expect(continueToPhoto(p).or(photo).first()).toBeVisible();
+  if (await continueToPhoto(p).isVisible()) await continueToPhoto(p).click();
+  await photo.setInputFiles({
+    name: "proof.png",
+    mimeType: "image/png",
+    buffer: png,
+  });
   await expect(
     p.getByAltText("Selected delivery evidence preview"),
   ).toBeVisible();
@@ -200,12 +223,7 @@ test("source multi-stop online handoff, approved shortage and durable offline co
         exact: true,
       })
       .click();
-    await v
-      .getByRole("button", {
-        name: "Confirm arrival · safely stopped",
-        exact: true,
-      })
-      .click();
+    await arrive(v);
     await proof(v);
     await expect(
       v.getByText(`${sourceFirst} · Accepted by server`, { exact: true }),
@@ -222,19 +240,14 @@ test("source multi-stop online handoff, approved shortage and durable offline co
       .toBe((await call(m, `/orders/${first.id}`)).lines[0].ordered - 1);
     await v.getByRole("button", { name: "Journey", exact: true }).click();
     await assigned(v, "Assigned stop", second.id);
-    await v
-      .getByRole("button", {
-        name: "Confirm arrival · safely stopped",
-        exact: true,
-      })
-      .click();
-    await expect(v.getByLabel("Delivery photo", { exact: true })).toBeVisible();
+    await arrive(v);
+    await expect(continueToPhoto(v)).toBeVisible();
     await v.evaluate(async () => {
       await navigator.serviceWorker.ready;
     });
     await v.reload();
     await assigned(v, "Assigned stop", second.id);
-    await expect(v.getByLabel("Delivery photo", { exact: true })).toBeVisible();
+    await expect(continueToPhoto(v)).toBeVisible();
     await contexts[3].setOffline(true);
     await v.reload();
     await assigned(v, "Assigned stop", second.id);
@@ -456,12 +469,7 @@ test("reviewed store drafts produce a versioned multi-stop road journey with liv
     for (const o of created) {
       await v.getByRole("button", { name: "Journey", exact: true }).click();
       await assigned(v, "Assigned stop", o.id);
-      await v
-        .getByRole("button", {
-          name: "Confirm arrival · safely stopped",
-          exact: true,
-        })
-        .click();
+      await arrive(v);
       await proof(v);
       await expect(
         v.getByText(`${o.reference} · Accepted by server`, { exact: true }),
@@ -571,7 +579,7 @@ test("public regression fixture retains offline proof and resolves a same-stop c
     await expect(
       v.getByText(/The stop changed since this draft was recorded/),
     ).toHaveCount(0);
-    await expect(v.getByLabel("Delivery photo", { exact: true })).toBeVisible();
+    await expect(continueToPhoto(v)).toBeVisible();
     await v.evaluate(async () => {
       await navigator.serviceWorker.ready;
     });
@@ -617,7 +625,7 @@ test("public regression fixture retains offline proof and resolves a same-stop c
     );
     await v.reload();
     await assigned(v, "Assigned stop", order.id);
-    await expect(v.getByLabel("Delivery photo", { exact: true })).toBeVisible();
+    await expect(continueToPhoto(v)).toBeVisible();
     // No server command changes an arrived order's version, so the poll simulates one.
     const ordersList = (url: URL) => url.pathname === "/api/v1/orders";
     const bumpVersion = async (route: Route) => {
@@ -657,7 +665,9 @@ test("public regression fixture retains offline proof and resolves a same-stop c
       .fill("3");
     await v
       .getByLabel("Delivery issue", { exact: true })
-      .selectOption("Short at delivery");
+      .getByRole("radio", { name: "Short at delivery", exact: true })
+      .check();
+    await continueToPhoto(v).click();
     await v.getByLabel("Delivery photo", { exact: true }).setInputFiles({
       name: "draft-proof.png",
       mimeType: "image/png",
@@ -762,9 +772,11 @@ test("public regression fixture retains offline proof and resolves a same-stop c
     await expect(
       v.getByLabel("Delivered Rice cartons quantity", { exact: true }),
     ).toHaveValue("3");
-    await expect(v.getByLabel("Delivery issue", { exact: true })).toHaveValue(
-      "Short at delivery",
-    );
+    await expect(
+      v
+        .getByLabel("Delivery issue", { exact: true })
+        .getByRole("radio", { name: "Short at delivery", exact: true }),
+    ).toBeChecked();
     await expect(
       v.getByAltText("Selected delivery evidence preview"),
     ).toBeVisible();

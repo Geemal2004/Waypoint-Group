@@ -13,6 +13,16 @@ import {
 } from "./operations";
 import { Button } from "./ui/button";
 import { IssueConversation } from "./live-operations";
+import {
+  ArrowUpRight,
+  Home,
+  PackagePlus,
+  Truck,
+  History,
+  Package,
+  Clock3,
+  CheckCircle2,
+} from "lucide-react";
 type Action = (path: string, body: unknown) => Promise<boolean>;
 type Draft = {
   id: string;
@@ -44,7 +54,9 @@ export function StoreWorkspace({
     [search, setSearch] = useState(""),
     [counts, setCounts] = useState<Record<string, number>>({}),
     [review, setReview] = useState(false),
-    [draft, setDraft] = useState<Draft | null>(null),
+    [draftsByTemp, setDraftsByTemp] = useState<Record<string, Draft | null>>(
+      {},
+    ),
     [message, setMessage] = useState(""),
     [error, setError] = useState(""),
     [saving, setSaving] = useState(false),
@@ -81,8 +93,9 @@ export function StoreWorkspace({
         !["RECEIVED_AT_STORE", "CANCELLED"].includes(o.status),
     ),
     order = visible.find((o) => o.id === selected);
+  const draft = draftsByTemp[temperature] || null;
   useEffect(() => {
-    setDraft(null);
+    setDraftsByTemp({});
     setCounts({});
     setReview(false);
     setSelected("");
@@ -111,7 +124,7 @@ export function StoreWorkspace({
       day,
       items: items.map((p) => ({ productId: p.id, quantity: counts[p.id] })),
     });
-    setDraft(saved);
+    setDraftsByTemp((prev) => ({ ...prev, [temperature]: saved }));
     return saved;
   };
   const change = (operation: string) =>
@@ -132,43 +145,54 @@ export function StoreWorkspace({
   return (
     <div className={`manager-page store-workspace brand-${brand} task-${tab}`}>
       <div className="store-brand-header">
-        <span className="brand-rail">{brandLabel(brand)}</span>
+        <div>
+          <span className="store-eyebrow">SHOP OWNER WORKSPACE</span>
+          <span className="brand-rail">{brandLabel(brand)}</span>
+        </div>
         <span className="badge">Store operations</span>
       </div>
       <div className="store-inner">
-        <label>
-          Outlet
-          <select
-            aria-label="Outlet"
-            value={outletId}
-            onChange={(e) => setOutlet(e.target.value)}
-          >
-            {catalog.outlets.map((o) => (
-              <option key={o.id} value={o.id}>
-                {o.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <nav className="role-tabs" aria-label="Store tasks">
-          {[
-            ["home", "Home"],
-            ["new", "New order"],
-            ["tracking", "Tracking"],
-            ["history", "History"],
-          ].map(([t, label]) => (
-            <Button
-              key={t}
-              variant={tab === t ? "default" : "outline"}
-              onClick={() => {
-                setTab(t);
-                setAmending(false);
-              }}
+        <div className="store-toolbar">
+          <label>
+            Outlet
+            <select
+              aria-label="Outlet"
+              value={outletId}
+              onChange={(e) => setOutlet(e.target.value)}
             >
-              {label}
-            </Button>
-          ))}
-        </nav>
+              {catalog.outlets.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <nav className="role-tabs" aria-label="Store tasks">
+            {[
+              { id: "home", label: "Home", icon: Home },
+              { id: "new", label: "New order", icon: PackagePlus },
+              { id: "tracking", label: "Tracking", icon: Truck },
+              { id: "history", label: "History", icon: History },
+            ].map(({ id: t, label, icon: Icon }) => (
+              <Button
+                key={t}
+                variant={tab === t ? "default" : "outline"}
+                aria-current={
+                  tab === t || (t === "tracking" && tab === "receipt")
+                    ? "page"
+                    : undefined
+                }
+                onClick={() => {
+                  setTab(t);
+                  setAmending(false);
+                }}
+              >
+                <Icon size={18} aria-hidden="true" />
+                {label}
+              </Button>
+            ))}
+          </nav>
+        </div>
         {error && <Notice tone="critical">{error}</Notice>}
         {message && <Notice tone="success">{message}</Notice>}
         {tab === "new" || amending ? (
@@ -221,8 +245,6 @@ export function StoreWorkspace({
                     variant={temperature === t ? "default" : "outline"}
                     onClick={() => {
                       setTemperature(t);
-                      setCounts({});
-                      setDraft(null);
                       setReview(false);
                     }}
                   >
@@ -246,37 +268,110 @@ export function StoreWorkspace({
                     onChange={(e) => setSearch(e.target.value)}
                   />
                 </label>
-                {products
-                  .filter((p) =>
+                <div className="store-catalog-layout">
+                  <div className="store-grid">
+                    {products
+                      .filter((p) =>
+                        p.name.toLowerCase().includes(search.toLowerCase()),
+                      )
+                      .map((p) => (
+                        <Panel key={p.id} className="product-row">
+                          <div className="product-icon">
+                            <img src="/design/2109-8-6772f.svg" alt="" />
+                          </div>
+                          <div className="product-copy">
+                            <h3>{p.name}</h3>
+                            <p>
+                              {p.unit || "unit"} · {p.weight_kg} kg ·{" "}
+                              {p.volume_m3} m³ each
+                            </p>
+                            <small>
+                              {p.handling ||
+                                "Follow the declared handling requirements"}
+                            </small>
+                          </div>
+                          <Counter
+                            label={p.name}
+                            value={counts[p.id] || 0}
+                            max={100000}
+                            onChange={(v) => {
+                              setCounts({ ...counts, [p.id]: v });
+                              setReview(false);
+                            }}
+                          />
+                        </Panel>
+                      ))}
+                  </div>
+                  <aside
+                    className="store-selection panel"
+                    aria-label="Current order summary"
+                  >
+                    <span className="store-eyebrow">YOUR DELIVERY REQUEST</span>
+                    <h2>Order summary</h2>
+                    <p className="muted">
+                      {day || "Choose an operating day"} ·{" "}
+                      {temperature.toLowerCase()}
+                    </p>
+                    {items.length ? (
+                      <ul>
+                        {items.map((p) => (
+                          <li key={p.id}>
+                            <span>{p.name}</span>
+                            <strong>
+                              {counts[p.id]} {p.unit || "units"}
+                            </strong>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p>
+                        Select quantities from the catalogue to build your
+                        delivery request.
+                      </p>
+                    )}
+                    <dl className="store-totals">
+                      <div>
+                        <dt>Product lines</dt>
+                        <dd>{items.length}</dd>
+                      </div>
+                      <div>
+                        <dt>Total weight</dt>
+                        <dd>
+                          {items
+                            .reduce(
+                              (n, p) => n + counts[p.id] * Number(p.weight_kg),
+                              0,
+                            )
+                            .toFixed(1)}{" "}
+                          kg
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>Total volume</dt>
+                        <dd>
+                          {items
+                            .reduce(
+                              (n, p) => n + counts[p.id] * Number(p.volume_m3),
+                              0,
+                            )
+                            .toFixed(2)}{" "}
+                          m³
+                        </dd>
+                      </div>
+                    </dl>
+                    <p className="muted">
+                      Review your selection before submitting it to dispatch.
+                    </p>
+                  </aside>
+                </div>
+                {products.length > 0 &&
+                  !products.some((p) =>
                     p.name.toLowerCase().includes(search.toLowerCase()),
-                  )
-                  .map((p) => (
-                    <Panel key={p.id} className="product-row">
-                      <div className="product-icon">
-                        <img src="/design/2109-8-6772f.svg" alt="" />
-                      </div>
-                      <div className="product-copy">
-                        <h3>{p.name}</h3>
-                        <p>
-                          {p.unit || "unit"} · {p.weight_kg} kg · {p.volume_m3}{" "}
-                          m³ each
-                        </p>
-                        <small>
-                          {p.handling ||
-                            "Follow the declared handling requirements"}
-                        </small>
-                      </div>
-                      <Counter
-                        label={p.name}
-                        value={counts[p.id] || 0}
-                        max={100000}
-                        onChange={(v) => {
-                          setCounts({ ...counts, [p.id]: v });
-                          setReview(false);
-                        }}
-                      />
-                    </Panel>
-                  ))}
+                  ) && (
+                    <Notice>
+                      No products match “{search}”. Try another search.
+                    </Notice>
+                  )}
                 {!products.length && (
                   <Notice>
                     No reviewed catalogue products are available for this load.
@@ -404,8 +499,17 @@ export function StoreWorkspace({
                           `/drafts/${d.id}/submit`,
                           { expectedVersion: d.version },
                         );
-                        setDraft(null);
-                        setCounts({});
+                        setDraftsByTemp((prev) => ({
+                          ...prev,
+                          [temperature]: null,
+                        }));
+                        setCounts((prev) => {
+                          const next = { ...prev };
+                          for (const item of items) {
+                            delete next[item.id];
+                          }
+                          return next;
+                        });
                         setReview(false);
                         setDay(submitted.day);
                         localStorage.setItem(
@@ -432,88 +536,143 @@ export function StoreWorkspace({
           </>
         ) : tab === "home" ? (
           <>
-            <div className="page-heading">
-              <h1>Your store deliveries</h1>
-              <p>
-                {outlet?.name} · receiving {outlet?.window_start.slice(0, 5)}–
-                {outlet?.window_end.slice(0, 5)}
-              </p>
+            <div className="page-heading store-home-heading">
+              <div>
+                <h1>Your store deliveries</h1>
+                <p>
+                  {outlet?.name} · receiving {outlet?.window_start.slice(0, 5)}–
+                  {outlet?.window_end.slice(0, 5)}
+                </p>
+              </div>
+              <Button onClick={() => setTab("new")}>
+                <PackagePlus size={18} aria-hidden="true" />
+                New order
+              </Button>
             </div>
             <div className="store-summary">
               <Panel>
+                <Truck
+                  className="store-metric-icon"
+                  size={22}
+                  aria-hidden="true"
+                />
                 <small>Active deliveries</small>
                 <strong>{active.length}</strong>
               </Panel>
               <Panel>
+                <Package
+                  className="store-metric-icon"
+                  size={22}
+                  aria-hidden="true"
+                />
                 <small>Receipt required</small>
                 <strong>
                   {visible.filter((o) => o.status === "DELIVERED").length}
                 </strong>
               </Panel>
+              <Panel>
+                <CheckCircle2
+                  className="store-metric-icon"
+                  size={22}
+                  aria-hidden="true"
+                />
+                <small>Received deliveries</small>
+                <strong>
+                  {
+                    visible.filter((o) => o.status === "RECEIVED_AT_STORE")
+                      .length
+                  }
+                </strong>
+              </Panel>
+              <Panel>
+                <Clock3
+                  className="store-metric-icon"
+                  size={22}
+                  aria-hidden="true"
+                />
+                <small>Receiving window</small>
+                <strong className="store-window">
+                  {outlet?.window_start.slice(0, 5) || "—"}–
+                  {outlet?.window_end.slice(0, 5) || "—"}
+                </strong>
+              </Panel>
             </div>
-            {active
-              .sort((a, b) => a.day.localeCompare(b.day))
-              .map((o) => (
-                <button
-                  className="order-row"
-                  key={o.id}
-                  onClick={() => open(o)}
-                >
-                  <span>
-                    <strong>
-                      {o.source_ref || o.reference || o.outlet_id}
-                    </strong>
-                    <small>
-                      {o.day} ·{" "}
-                      {o.temperature === "AMBIENT"
-                        ? "dry"
-                        : o.temperature.toLowerCase()}
-                    </small>
-                  </span>
-                  <span className="badge">
-                    {o.confirmation_required && !o.confirmed_at
-                      ? "Submitted"
-                      : statusLabel(o.status)}
-                  </span>
-                </button>
-              ))}
+            <h2 className="store-section-heading">
+              Upcoming deliveries <span>{active.length}</span>
+            </h2>
+            <div className="store-grid">
+              {active
+                .sort((a, b) => a.day.localeCompare(b.day))
+                .map((o) => (
+                  <button
+                    className="order-row"
+                    key={o.id}
+                    onClick={() => open(o)}
+                  >
+                    <span>
+                      <strong>
+                        {o.source_ref || o.reference || o.outlet_id}
+                      </strong>
+                      <small>
+                        {o.day} ·{" "}
+                        {o.temperature === "AMBIENT"
+                          ? "dry"
+                          : o.temperature.toLowerCase()}
+                      </small>
+                    </span>
+                    <span className={`badge status-${o.status}`}>
+                      {o.confirmation_required && !o.confirmed_at
+                        ? "Submitted"
+                        : statusLabel(o.status)}
+                    </span>
+                    <ArrowUpRight
+                      size={18}
+                      className="store-order-arrow"
+                      aria-hidden="true"
+                    />
+                  </button>
+                ))}
+            </div>
             {!active.length && (
               <Panel>
                 No upcoming delivery. Start a new order from the reviewed
                 catalogue.
               </Panel>
             )}
-            {(drafts.data || [])
-              .filter((d) => d.outlet_id === outletId)
-              .map((d) => (
-                <Panel key={d.id}>
-                  <h3>Saved draft · {d.day}</h3>
-                  <p>
-                    {d.items.length} product lines · revision {d.version}
-                  </p>
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      setDraft(d);
-                      setDay(d.day);
-                      setCounts(
-                        Object.fromEntries(
-                          d.items.map((i) => [i.productId, i.quantity]),
-                        ),
-                      );
-                      setTemperature(
-                        catalog.products.find(
-                          (p) => p.id === d.items[0]?.productId,
-                        )?.temperature || "AMBIENT",
-                      );
-                      setTab("new");
-                      setReview(false);
-                    }}
-                  >
-                    Resume draft
-                  </Button>
-                </Panel>
-              ))}
+            <div className="store-grid">
+              {(drafts.data || [])
+                .filter((d) => d.outlet_id === outletId)
+                .map((d) => (
+                  <Panel key={d.id}>
+                    <h3>Saved draft · {d.day}</h3>
+                    <p>
+                      {d.items.length} product lines · revision {d.version}
+                    </p>
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        const temp =
+                          catalog.products.find(
+                            (p) => p.id === d.items[0]?.productId,
+                          )?.temperature || "AMBIENT";
+                        setDraftsByTemp((prev) => ({ ...prev, [temp]: d }));
+                        setDay(d.day);
+                        setCounts((prev) => ({
+                          ...prev,
+                          ...Object.fromEntries(
+                            d.items.map((i) => [i.productId, i.quantity]),
+                          ),
+                        }));
+                        setTemperature(temp);
+                        setTab("new");
+                        setReview(false);
+                      }}
+                    >
+                      Resume draft
+                    </Button>
+                  </Panel>
+                ))}
+            </div>
           </>
         ) : (
           <>
@@ -529,158 +688,178 @@ export function StoreWorkspace({
             </div>
             {!order || tab === "history" ? (
               <>
-                {visible
-                  .filter(
-                    (o) =>
-                      tab === "history" ||
-                      !["RECEIVED_AT_STORE", "CANCELLED"].includes(o.status),
-                  )
-                  .map((o) => (
-                    <button
-                      className="order-row"
-                      key={o.id}
-                      onClick={() => open(o)}
-                    >
-                      <span>
-                        <strong>
-                          {o.source_ref || o.reference || o.outlet_id}
-                        </strong>
-                        <small>
-                          {o.day} · {o.temperature.toLowerCase()}
-                        </small>
-                      </span>
-                      <span className="badge">{statusLabel(o.status)}</span>
-                    </button>
-                  ))}
+                <div className="store-grid">
+                  {visible
+                    .filter(
+                      (o) =>
+                        tab === "history" ||
+                        !["RECEIVED_AT_STORE", "CANCELLED"].includes(o.status),
+                    )
+                    .map((o) => (
+                      <button
+                        className="order-row"
+                        key={o.id}
+                        onClick={() => open(o)}
+                      >
+                        <span>
+                          <strong>
+                            {o.source_ref || o.reference || o.outlet_id}
+                          </strong>
+                          <small>
+                            {o.day} · {o.temperature.toLowerCase()}
+                          </small>
+                        </span>
+                        <span className={`badge status-${o.status}`}>
+                          {statusLabel(o.status)}
+                        </span>
+                        <ArrowUpRight
+                          size={18}
+                          className="store-order-arrow"
+                          aria-hidden="true"
+                        />
+                      </button>
+                    ))}
+                </div>
                 {!visible.length && (
                   <Panel>No deliveries recorded for this outlet.</Panel>
                 )}
               </>
             ) : (
-              <>
-                <Panel>
-                  <h2>{order.source_ref || order.reference}</h2>
-                  <span className="badge">
-                    {order.confirmation_required && !order.confirmed_at
-                      ? "Submitted · awaiting dispatch review"
-                      : statusLabel(order.status)}
-                  </span>
-                  <p>
-                    {order.day} ·{" "}
-                    {order.temperature === "AMBIENT"
-                      ? "Dry"
-                      : order.temperature.toLowerCase()}{" "}
-                    ·{" "}
-                    {order.run
-                      ? `${order.run.vehicle_id} · run ${order.run.trip} · plan v${order.run.plan_version}`
-                      : "Awaiting allocation"}
-                  </p>
-                  <p>
-                    Receiving {order.window_start.slice(0, 5)}–
-                    {order.window_end.slice(0, 5)}
-                  </p>
-                  {order.lines.map((l) => (
-                    <p key={l.id}>
-                      {l.name} · {l.ordered} {l.unit || "units"} ordered
-                      {l.loaded != null ? ` · ${l.loaded} loaded` : ""}
-                      {l.delivered != null ? ` · ${l.delivered} delivered` : ""}
+              <div className="store-detail">
+                <div className="store-detail-main">
+                  <Panel>
+                    <h2>{order.source_ref || order.reference}</h2>
+                    <span className="badge">
+                      {order.confirmation_required && !order.confirmed_at
+                        ? "Submitted · awaiting dispatch review"
+                        : statusLabel(order.status)}
+                    </span>
+                    <p>
+                      {order.day} ·{" "}
+                      {order.temperature === "AMBIENT"
+                        ? "Dry"
+                        : order.temperature.toLowerCase()}{" "}
+                      ·{" "}
+                      {order.run
+                        ? `${order.run.vehicle_id} · run ${order.run.trip} · plan v${order.run.plan_version}`
+                        : "Awaiting allocation"}
                     </p>
+                    <p>
+                      Receiving {order.window_start.slice(0, 5)}–
+                      {order.window_end.slice(0, 5)}
+                    </p>
+                    {order.lines.map((l) => (
+                      <p key={l.id}>
+                        {l.name} · {l.ordered} {l.unit || "units"} ordered
+                        {l.loaded != null ? ` · ${l.loaded} loaded` : ""}
+                        {l.delivered != null
+                          ? ` · ${l.delivered} delivered`
+                          : ""}
+                      </p>
+                    ))}
+                    {order.schedule_reason && <p>{order.schedule_reason}</p>}
+                  </Panel>
+                  {order.deferrals.map((d, i) => (
+                    <Notice key={i} tone="warning">
+                      {d.reason} · next eligible {d.next_day} ·{" "}
+                      {d.consecutive_skips} consecutive skips
+                    </Notice>
                   ))}
-                  {order.schedule_reason && <p>{order.schedule_reason}</p>}
-                </Panel>
-                {order.deferrals.map((d, i) => (
-                  <Notice key={i} tone="warning">
-                    {d.reason} · next eligible {d.next_day} ·{" "}
-                    {d.consecutive_skips} consecutive skips
-                  </Notice>
-                ))}
-                {brand === "STYLE" && (
-                  <Panel>
-                    <h2>Mall access</h2>
-                    <p>
-                      {order.window_start.slice(0, 5)}–
-                      {order.window_end.slice(0, 5)} outlet window
-                    </p>
-                    <p>
-                      {order.access === "VAN_ONLY"
-                        ? "Van access required."
-                        : ""}{" "}
-                      Use the outlet’s agreed receiving access. Gate passes and
-                      dock bookings are not verified by Waypoint.
-                    </p>
-                  </Panel>
-                )}
-                {brand === "TECH" && (
-                  <Panel>
-                    <h2>Protected receiving</h2>
-                    <p>
-                      Inspect packaging and count each unit. Record damage
-                      separately from quantities that were never loaded.
-                    </p>
-                  </Panel>
-                )}
-                {order.status === "DELIVERED" && (
-                  <Receipt
-                    key={order.id + order.version}
-                    order={order}
-                    action={action}
-                    busy={busy}
-                  />
-                )}
-                {["RECEIVED", "SCHEDULED"].includes(order.status) &&
-                  !order.source_ref && (
+                  {brand === "STYLE" && (
                     <Panel>
-                      <h2>Review a change</h2>
-                      <label>
-                        Reason
-                        <textarea
-                          value={reason}
-                          maxLength={500}
-                          onChange={(e) => setReason(e.target.value)}
-                        />
-                      </label>
-                      <Button
-                        variant="outline"
-                        disabled={busy || !navigator.onLine}
-                        onClick={() => {
-                          setAmending(true);
-                          setTemperature(order.temperature);
-                          setCounts(
-                            Object.fromEntries(
-                              order.lines.map((l) => [l.product_id, l.ordered]),
-                            ),
-                          );
-                          setReview(false);
-                          setDay(order.day);
-                        }}
-                      >
-                        Amend quantities
-                      </Button>
-                      {order.status === "RECEIVED" && (
-                        <Button
-                          variant="outline"
-                          disabled={!reason.trim() || busy || !navigator.onLine}
-                          onClick={() => change("CANCEL")}
-                        >
-                          Cancel unallocated order
-                        </Button>
-                      )}
-                      <p className="muted">
-                        Published amendments are accepted only before any trip
-                        stop begins loading and must pass all road and
-                        allocation checks.
+                      <h2>Mall access</h2>
+                      <p>
+                        {order.window_start.slice(0, 5)}–
+                        {order.window_end.slice(0, 5)} outlet window
+                      </p>
+                      <p>
+                        {order.access === "VAN_ONLY"
+                          ? "Van access required."
+                          : ""}{" "}
+                        Use the outlet’s agreed receiving access. Gate passes
+                        and dock bookings are not verified by Waypoint.
                       </p>
                     </Panel>
                   )}
-                <IssueConversation orderId={order.id} />
-                <details>
-                  <summary>Delivery history</summary>
-                  <Timeline order={order} />
-                </details>
-                <Button variant="outline" onClick={() => setSelected("")}>
-                  Back to deliveries
-                </Button>
-              </>
+                  {brand === "TECH" && (
+                    <Panel>
+                      <h2>Protected receiving</h2>
+                      <p>
+                        Inspect packaging and count each unit. Record damage
+                        separately from quantities that were never loaded.
+                      </p>
+                    </Panel>
+                  )}
+                  {order.status === "DELIVERED" && (
+                    <Receipt
+                      key={order.id + order.version}
+                      order={order}
+                      action={action}
+                      busy={busy}
+                    />
+                  )}
+                  {["RECEIVED", "SCHEDULED"].includes(order.status) &&
+                    !order.source_ref && (
+                      <Panel>
+                        <h2>Review a change</h2>
+                        <label>
+                          Reason
+                          <textarea
+                            value={reason}
+                            maxLength={500}
+                            onChange={(e) => setReason(e.target.value)}
+                          />
+                        </label>
+                        <Button
+                          variant="outline"
+                          disabled={busy || !navigator.onLine}
+                          onClick={() => {
+                            setAmending(true);
+                            setTemperature(order.temperature);
+                            setCounts(
+                              Object.fromEntries(
+                                order.lines.map((l) => [
+                                  l.product_id,
+                                  l.ordered,
+                                ]),
+                              ),
+                            );
+                            setReview(false);
+                            setDay(order.day);
+                          }}
+                        >
+                          Amend quantities
+                        </Button>
+                        {order.status === "RECEIVED" && (
+                          <Button
+                            variant="outline"
+                            disabled={
+                              !reason.trim() || busy || !navigator.onLine
+                            }
+                            onClick={() => change("CANCEL")}
+                          >
+                            Cancel unallocated order
+                          </Button>
+                        )}
+                        <p className="muted">
+                          Published amendments are accepted only before any trip
+                          stop begins loading and must pass all road and
+                          allocation checks.
+                        </p>
+                      </Panel>
+                    )}
+                </div>
+                <div className="store-detail-side">
+                  <IssueConversation orderId={order.id} />
+                  <details>
+                    <summary>Delivery history</summary>
+                    <Timeline order={order} />
+                  </details>
+                  <Button variant="outline" onClick={() => setSelected("")}>
+                    Back to deliveries
+                  </Button>
+                </div>
+              </div>
             )}
           </>
         )}

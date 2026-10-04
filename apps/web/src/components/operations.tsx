@@ -7,6 +7,16 @@ import {
   Camera,
   ArrowRight,
   RefreshCw,
+  Route,
+  ClipboardCheck,
+  CloudUpload,
+  History as HistoryIcon,
+  Clock3,
+  Truck,
+  Thermometer,
+  Wifi,
+  WifiOff,
+  TriangleAlert,
 } from "lucide-react";
 import { Button } from "./ui/button";
 import { api } from "../lib/api";
@@ -27,6 +37,16 @@ import {
 import { OrderDesk } from "./order-desk";
 import { Administration } from "./administration";
 import { OperationsHistory } from "./operations-history";
+import {
+  driverActive,
+  driverTripKey,
+  driverTrips,
+  driverSyncSummary,
+  driverStep,
+  driverStepTitle,
+} from "../lib/driver-workspace";
+import { useWakeLock } from "../lib/use-wake-lock";
+import { useLocationSharing } from "../lib/use-location-sharing";
 
 export const statusLabel = (value: string) =>
   ({
@@ -120,6 +140,7 @@ export function Counter({
       <input
         aria-label={label + " quantity"}
         type="number"
+        inputMode="numeric"
         min="0"
         max={max}
         value={value}
@@ -724,6 +745,25 @@ export function Driver({
     [outbox, setOutbox] = useState<OutboxAction[]>([]),
     [drafts, setDrafts] = useState<ProofDraft[]>([]),
     [tab, setTab] = useState("journey");
+  const [selectedTrip, setSelectedTrip] = useState("");
+  const [savedStop, setSavedStop] = useState<Order | null>(null);
+  const [arriving, setArriving] = useState(false);
+  const [online, setOnline] = useState(navigator.onLine);
+  useEffect(() => {
+    const changed = () => setOnline(navigator.onLine);
+    window.addEventListener("online", changed);
+    window.addEventListener("offline", changed);
+    return () => {
+      window.removeEventListener("online", changed);
+      window.removeEventListener("offline", changed);
+    };
+  }, []);
+  useEffect(() => {
+    setSelected("");
+    setSelectedTrip("");
+    setSavedStop(null);
+    setTab("journey");
+  }, [account.id, day]);
   useEffect(() => {
     let live = true;
     const read = () =>
@@ -733,7 +773,9 @@ export function Driver({
       ])
         .then(([actions, kept]) => {
           if (live) {
-            setOutbox(actions);
+            setOutbox(
+              actions.sort((a, b) => b.capturedAt.localeCompare(a.capturedAt)),
+            );
             setDrafts(kept);
           }
         })
@@ -745,7 +787,13 @@ export function Driver({
       clearInterval(timer);
     };
   }, [account.id]);
-  const active = orders
+  const trips = driverTrips(orders, day);
+  const trip =
+    trips.find((t) => t.key === selectedTrip) ||
+    trips.find((t) => t.stops.some(driverActive)) ||
+    trips[0];
+  const tripStops = trip?.stops || [];
+  const active = tripStops
     .filter(
       (o) =>
         (!day || o.day === day) &&
@@ -760,7 +808,9 @@ export function Driver({
     if (tab !== "history" && selected && !active.some((o) => o.id === selected))
       setSelected("");
   }, [day, orders, selected, tab]);
-  const order = orders.find((o) => o.id === selected) || active[0],
+  const order =
+      (tab === "history" ? orders : active).find((o) => o.id === selected) ||
+      active[0],
     saved = outbox.find(
       (a) => a.entityId === order?.id && a.syncState !== "rejected",
     );
@@ -770,41 +820,260 @@ export function Driver({
     else if (order?.status === "RELEASED" || order?.status === "IN_TRANSIT")
       setTab("journey");
   }, [order?.id, order?.status]);
+  useEffect(() => setArriving(false), [order?.id, order?.status]);
+  const sharing = useLocationSharing(account, order);
+  const moving = sharing.moving;
+  useEffect(() => {
+    if (saved && order && !savedStop && tab === "proof") setSavedStop(order);
+  }, [saved?.actionId, order?.id, tab]);
+  const syncSummary = driverSyncSummary(outbox);
+  const completed = tripStops.filter((o) =>
+    ["DELIVERED", "RECEIVED_AT_STORE"].includes(o.status),
+  );
+  const confirmation =
+    savedStop && outbox.find((a) => a.entityId === savedStop.id);
+  const earlierStopsUnresolved =
+    !!order &&
+    ((order.tripStops || []).some(
+      (s) =>
+        s.sequence < (order.run?.stop_sequence || 1) &&
+        !["DELIVERED", "RECEIVED_AT_STORE", "DEFERRED"].includes(s.status),
+    ) ||
+      tripStops.some(
+        (s) =>
+          (s.run?.stop_sequence || 1) < (order.run?.stop_sequence || 1) &&
+          !["DELIVERED", "RECEIVED_AT_STORE", "DEFERRED"].includes(s.status),
+      ));
+  const loadNotReleased =
+    !!order && (order.tripStops || []).some((s) => s.status !== "RELEASED");
+  useWakeLock(
+    tripStops.some((o) => ["IN_TRANSIT", "ARRIVED"].includes(o.status)),
+  );
+  const step = driverStep(order, !!savedStop, !!trip);
+  const tripPicker = trips.length > 0 && (
+    <Panel className="driver-trip-overview">
+      {trips.length > 1 && (
+        <>
+          <h2>Your trips</h2>
+          <div
+            className="driver-choice-list"
+            role="radiogroup"
+            aria-label="Assigned trip"
+          >
+            {trips.map((t) => {
+              const first = t.stops[0];
+              const done = t.stops.filter((s) =>
+                ["DELIVERED", "RECEIVED_AT_STORE"].includes(s.status),
+              ).length;
+              return (
+                <label
+                  key={t.key}
+                  className={
+                    "driver-choice" + (t.key === trip?.key ? " selected" : "")
+                  }
+                >
+                  <input
+                    type="radio"
+                    name="driver-trip"
+                    value={t.key}
+                    checked={t.key === trip?.key}
+                    onChange={() => {
+                      setSelectedTrip(t.key);
+                      setSelected("");
+                      setSavedStop(null);
+                      setTab("journey");
+                    }}
+                  />
+                  <Truck size={28} aria-hidden="true" />
+                  <span>
+                    <strong>
+                      {first.run?.vehicle_id} · trip {first.run?.trip}
+                    </strong>
+                    <small>
+                      {first.day} · {done} of {t.stops.length} delivered
+                    </small>
+                  </span>
+                </label>
+              );
+            })}
+          </div>
+        </>
+      )}
+      <h2>Trip stops</h2>
+      <p className="driver-trip-progress">
+        <strong>
+          {completed.length} of {tripStops.length}
+        </strong>{" "}
+        stops delivered · {tripStops[0]?.temperature.toLowerCase()}
+      </p>
+      <progress
+        aria-label="Trip delivery progress"
+        value={completed.length}
+        max={tripStops.length}
+      />
+      <ol
+        className="driver-stop-list"
+        role="radiogroup"
+        aria-label="Assigned stop"
+      >
+        {tripStops.map((stop) => {
+          const selectable = active.some((o) => o.id === stop.id);
+          const sequence = stop.run?.stop_sequence || 1;
+          const finished = ["DELIVERED", "RECEIVED_AT_STORE"].includes(
+            stop.status,
+          );
+          return (
+            <li
+              key={stop.id}
+              className={
+                "driver-stop-row" +
+                (stop.id === order?.id ? " selected" : "") +
+                (selectable ? "" : " inactive")
+              }
+            >
+              {selectable && (
+                <input
+                  type="radio"
+                  name="driver-stop"
+                  value={stop.id}
+                  checked={stop.id === order?.id}
+                  aria-label={`Stop ${sequence} · ${stop.outlet_name} · ${statusLabel(stop.status)}`}
+                  onChange={() => {
+                    setSelected(stop.id);
+                    setSavedStop(null);
+                  }}
+                />
+              )}
+              <span className="driver-seq" aria-hidden="true">
+                {finished ? <Check size={20} /> : sequence}
+              </span>
+              <span className="driver-stop-copy">
+                <strong>{stop.outlet_name}</strong>
+                <small>
+                  {stop.window_start.slice(0, 5)}–{stop.window_end.slice(0, 5)}{" "}
+                  · {stop.lines.reduce((n, l) => n + (l.loaded || 0), 0)} of{" "}
+                  {stop.lines.reduce((n, l) => n + l.ordered, 0)} units
+                </small>
+                {stop.run?.partial_reason && (
+                  <small className="driver-shortage">
+                    <TriangleAlert size={16} aria-hidden="true" /> Approved
+                    shortage: {stop.run.partial_reason}
+                  </small>
+                )}
+              </span>
+              <span className={"badge status-" + stop.status}>
+                {statusLabel(stop.status)}
+              </span>
+            </li>
+          );
+        })}
+      </ol>
+    </Panel>
+  );
+  const tabs = [
+    ["journey", "Journey", Route],
+    ["proof", "Stop proof", ClipboardCheck],
+    ["sync", "Sync", CloudUpload],
+    ["history", "History", HistoryIcon],
+  ] as const;
   return (
-    <>
+    <div className="driver-workspace">
       <div className="page-heading">
         <h1>
           {tab === "history"
             ? "Journey history"
-            : tab === "proof"
-              ? "Record your current stop"
-              : tab === "sync"
-                ? "Proof and sync"
-                : "Your assigned journey"}
+            : tab === "sync"
+              ? "Proof and sync"
+              : tab === "proof" && step !== "arrived" && step !== "saved"
+                ? "Record your current stop"
+                : driverStepTitle[step]}
         </h1>
-        <p>{account.depot} · acknowledge the released plan before departure.</p>
       </div>
-      <nav className="role-tabs" aria-label="Driver tasks">
-        {[
-          ["journey", "Journey"],
-          ["proof", "Stop proof"],
-          ["sync", "Sync"],
-          ["history", "History"],
-        ].map(([t, label]) => (
+      <nav className="role-tabs driver-bottom-nav" aria-label="Driver tasks">
+        {tabs.map(([t, label, TabIcon]) => (
           <Button
             key={t}
             variant={tab === t ? "default" : "outline"}
+            aria-current={tab === t ? "page" : undefined}
             onClick={() => setTab(t)}
           >
+            <TabIcon size={24} aria-hidden="true" />
             {label}
+            {t === "sync" && syncSummary.waiting + syncSummary.review > 0 && (
+              <span className="driver-nav-badge" aria-hidden="true">
+                {syncSummary.waiting + syncSummary.review}
+              </span>
+            )}
           </Button>
         ))}
       </nav>
-      <div className="driver-sync-banner" role="status">
-        {outbox.filter((a) => a.syncState !== "synced").length} proof action(s)
-        pending or needing attention · {navigator.onLine ? "Online" : "Offline"}
+      <div
+        className={
+          "driver-sync-banner" +
+          (syncSummary.review ? " review" : "") +
+          (online ? "" : " offline")
+        }
+        role="status"
+      >
+        <span>
+          {online ? (
+            <Wifi size={22} aria-hidden="true" />
+          ) : (
+            <WifiOff size={22} aria-hidden="true" />
+          )}
+          {online ? "Online" : "Offline"}
+        </span>
+        <span>
+          <CloudUpload size={22} aria-hidden="true" />
+          {syncSummary.waiting
+            ? `${syncSummary.waiting} stop${syncSummary.waiting === 1 ? "" : "s"} to send`
+            : "No stops waiting to send"}
+        </span>
+        {syncSummary.review > 0 && (
+          <span>
+            <TriangleAlert size={22} aria-hidden="true" />
+            {`${syncSummary.review} stop${syncSummary.review === 1 ? "" : "s"} need review`}
+          </span>
+        )}
       </div>
-      {tab === "history" ? (
+      {savedStop && tab !== "sync" && tab !== "history" && (
+        <Panel className="driver-saved-confirmation">
+          <h2>
+            {confirmation?.syncState === "synced"
+              ? "Delivery proof accepted"
+              : confirmation &&
+                  ["conflict", "rejected"].includes(confirmation.syncState)
+                ? "Saved evidence needs review"
+                : "Proof saved on this device"}
+          </h2>
+          <p>
+            {savedStop.outlet_name} · stop {savedStop.run?.stop_sequence || 1}
+          </p>
+          <p>
+            {confirmation?.message ||
+              "Your photo and quantities are retained on this phone. Server acceptance is pending."}
+          </p>
+          <p>Store receipt is a separate confirmation.</p>
+          <Button variant="outline" onClick={() => setTab("sync")}>
+            Review saved proof
+          </Button>
+          {active.find((o) => o.id !== savedStop.id) && (
+            <div className="driver-action-bar">
+              <Button
+                onClick={() => {
+                  const next = active.find((o) => o.id !== savedStop.id)!;
+                  setSelected(next.id);
+                  setSavedStop(null);
+                  setTab(next.status === "ARRIVED" ? "proof" : "journey");
+                }}
+              >
+                View next stop <ArrowRight size={22} aria-hidden="true" />
+              </Button>
+            </div>
+          )}
+        </Panel>
+      )}
+      {tab === "history" && (
         <OrderChooser
           orders={orders.filter(
             (o) => !["RELEASED", "IN_TRANSIT", "ARRIVED"].includes(o.status),
@@ -812,48 +1081,69 @@ export function Driver({
           selected={selected}
           onSelect={setSelected}
         />
-      ) : (
-        tab !== "sync" && (
-          <label>
-            Assigned stop
-            <select
-              aria-label="Assigned stop"
-              value={order?.id || ""}
-              onChange={(e) => setSelected(e.target.value)}
-            >
-              {active.map((o) => (
-                <option key={o.id} value={o.id}>
-                  {o.run?.vehicle_id} · stop {o.run?.stop_sequence || 1} ·{" "}
-                  {o.outlet_name} · {o.source_ref || o.reference}
-                </option>
-              ))}
-            </select>
-          </label>
-        )
       )}
+      {tab !== "sync" &&
+        tab !== "history" &&
+        !(order && !savedStop) &&
+        tripPicker}
       {!active.length && tab === "journey" && (
         <Panel>
-          No released journey assigned. Dispatch and loading must complete the
-          handoff first.
+          {trip
+            ? "No active stops in this trip. Review its stop summary and sync status."
+            : "No released journey assigned. Dispatch and loading must complete the handoff first."}
         </Panel>
       )}
-      {order && tab !== "sync" && tab !== "history" && (
+      {order && !savedStop && tab !== "sync" && tab !== "history" && (
         <>
-          <div hidden={tab !== "journey"}>
-            <DriverJourney account={account} order={order} />
-          </div>
           {tab === "journey" && (
             <>
-              <Panel>
-                <h2>{order.outlet_name}</h2>
-                <p>
-                  {order.run?.vehicle_name} · {order.temperature.toLowerCase()}{" "}
-                  · plan v{order.run?.plan_version}
+              <Panel className="driver-stop-card">
+                <p className="driver-eyebrow">
+                  {order.id === active[0]?.id ? "Next stop" : "Selected stop"} ·
+                  stop {order.run?.stop_sequence || 1}
+                  {tripStops.length ? ` of ${tripStops.length}` : ""}
                 </p>
-                <TripManifest order={order} />
-                <p>
-                  Receiving window {order.window_start.slice(0, 5)}–
-                  {order.window_end.slice(0, 5)}
+                <h2>{order.outlet_name}</h2>
+                <ul className="driver-facts">
+                  <li>
+                    <Clock3 size={26} aria-hidden="true" />
+                    <span>
+                      <small>Receiving window</small>
+                      {order.window_start.slice(0, 5)}–
+                      {order.window_end.slice(0, 5)}
+                    </span>
+                  </li>
+                  <li>
+                    <Truck size={26} aria-hidden="true" />
+                    <span>
+                      <small>Access</small>
+                      {order.access === "VAN_ONLY"
+                        ? "Van access only"
+                        : "Truck or van access"}
+                    </span>
+                  </li>
+                  <li>
+                    <Package size={26} aria-hidden="true" />
+                    <span>
+                      <small>Released load</small>
+                      {order.lines.reduce(
+                        (n, l) => n + (l.loaded || 0),
+                        0,
+                      )}{" "}
+                      units
+                    </span>
+                  </li>
+                  <li>
+                    <Thermometer size={26} aria-hidden="true" />
+                    <span>
+                      <small>Temperature</small>
+                      {order.temperature.charAt(0) +
+                        order.temperature.slice(1).toLowerCase()}
+                    </span>
+                  </li>
+                </ul>
+                <p className="driver-meta">
+                  {order.run?.vehicle_name} · plan v{order.run?.plan_version}
                 </p>
                 {order.status === "RELEASED" && (
                   <>
@@ -861,53 +1151,126 @@ export function Driver({
                       Loader released this load. Review quantities before
                       acknowledging departure.
                     </Notice>
-                    {order.lines.map((l) => (
-                      <p key={l.id}>
-                        {l.name} · {l.loaded} loaded / {l.ordered} ordered
-                      </p>
-                    ))}
-                    <Button
-                      disabled={busy || !navigator.onLine}
-                      onClick={() =>
-                        action(`/orders/${order.id}/start`, {
-                          expectedVersion: order.version,
-                        })
-                      }
-                    >
-                      Acknowledge plan & start journey
-                    </Button>
+                    <ul className="driver-load-lines">
+                      {order.lines.map((l) => (
+                        <li key={l.id}>
+                          <span>{l.name}</span>
+                          <strong>
+                            {l.loaded} / {l.ordered}
+                          </strong>
+                        </li>
+                      ))}
+                    </ul>
+                    <div className="driver-action-bar">
+                      <Button
+                        disabled={busy || !online || loadNotReleased}
+                        onClick={() =>
+                          action(`/orders/${order.id}/start`, {
+                            expectedVersion: order.version,
+                          })
+                        }
+                      >
+                        Acknowledge plan & start journey
+                      </Button>
+                    </div>
+                    {loadNotReleased && (
+                      <Notice>
+                        Loading must release every stop before departure.
+                      </Notice>
+                    )}
+                    {!online && (
+                      <Notice>
+                        Reconnect to acknowledge the load and start this trip.
+                      </Notice>
+                    )}
                   </>
                 )}
                 {order.status === "IN_TRANSIT" && (
                   <>
-                    <Notice>
-                      Record arrival when safely stopped. Follow the published
-                      stop order.
-                    </Notice>
-                    <Button
-                      disabled={busy || !navigator.onLine}
-                      onClick={() =>
-                        action(`/orders/${order.id}/arrive`, {
-                          expectedVersion: order.version,
-                        })
-                      }
-                    >
-                      Confirm arrival · safely stopped
-                    </Button>
+                    {moving ? (
+                      <Notice tone="warning">
+                        Vehicle is moving. Stop safely before recording arrival.
+                      </Notice>
+                    ) : (
+                      <Notice>
+                        Only use the app when parked. Follow the published stop
+                        order.
+                      </Notice>
+                    )}
+                    <div className="driver-action-bar">
+                      <Button
+                        disabled={
+                          busy || !online || earlierStopsUnresolved || !!moving
+                        }
+                        onClick={() => setArriving(true)}
+                      >
+                        {moving
+                          ? "Stop safely to record arrival"
+                          : "I've arrived"}
+                      </Button>
+                    </div>
+                    {earlierStopsUnresolved && (
+                      <Notice>
+                        Complete or explicitly defer earlier stops before
+                        arriving here.
+                      </Notice>
+                    )}
+                    {!online && (
+                      <Notice>
+                        Reconnect to confirm arrival. Any saved proof remains on
+                        this device.
+                      </Notice>
+                    )}
                   </>
                 )}
               </Panel>
+              {arriving && order.status === "IN_TRANSIT" && (
+                <ArriveSheet
+                  order={order}
+                  disabled={busy || !online || !!moving}
+                  onCancel={() => setArriving(false)}
+                  onConfirm={() => {
+                    setArriving(false);
+                    navigator.vibrate?.(40);
+                    action(`/orders/${order.id}/arrive`, {
+                      expectedVersion: order.version,
+                    });
+                  }}
+                />
+              )}
+              {tripPicker}
+              <DriverJourney
+                account={account}
+                order={order}
+                sharing={sharing}
+              />
               <IssueConversation orderId={order.id} />
             </>
           )}
-          {tab === "proof" && order.status === "ARRIVED" && !saved && (
-            <DeliveryForm
-              key={order.id + ":" + order.version}
-              account={account}
-              order={order}
-              onSaved={onSaved}
-            />
-          )}
+          {tab === "proof" &&
+            order.status === "ARRIVED" &&
+            !saved &&
+            moving && (
+              <Notice tone="warning">
+                Vehicle is moving. Your draft is kept on this phone; park safely
+                to continue recording this delivery.
+              </Notice>
+            )}
+          {tab === "proof" &&
+            order.status === "ARRIVED" &&
+            !saved &&
+            !moving && (
+              <DeliveryForm
+                key={order.id + ":" + order.version}
+                account={account}
+                order={order}
+                onSaved={() => {
+                  setSavedStop(order);
+                  setSelectedTrip(driverTripKey(order));
+                  onSaved();
+                }}
+              />
+            )}
           {tab === "proof" && saved && (
             <Notice tone={saved.syncState === "synced" ? "success" : "warning"}>
               {saved.syncState === "synced"
@@ -921,6 +1284,7 @@ export function Driver({
               quantities.
             </Notice>
           )}
+          {tab === "proof" && tripPicker}
           <details>
             <summary>Journey history and shared identifiers</summary>
             <p>
@@ -1010,7 +1374,47 @@ export function Driver({
           )}
         </Panel>
       )}
-    </>
+    </div>
+  );
+}
+function ArriveSheet({
+  order,
+  disabled,
+  onCancel,
+  onConfirm,
+}: {
+  order: Order;
+  disabled: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  useEffect(() => {
+    const close = (e: KeyboardEvent) => e.key === "Escape" && onCancel();
+    window.addEventListener("keydown", close);
+    return () => window.removeEventListener("keydown", close);
+  }, [onCancel]);
+  return (
+    <div className="driver-sheet-backdrop" onClick={onCancel}>
+      <section
+        className="driver-sheet"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="driver-arrive-title"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <p className="driver-eyebrow">
+          Stop {order.run?.stop_sequence || 1} · confirm arrival
+        </p>
+        <h2 id="driver-arrive-title">{order.outlet_name}</h2>
+        <p>Confirm you are parked safely at this outlet.</p>
+        <Button autoFocus disabled={disabled} onClick={onConfirm}>
+          Confirm arrival
+        </Button>
+        <Button variant="outline" onClick={onCancel}>
+          Cancel
+        </Button>
+      </section>
+    </div>
   );
 }
 function DeferredDraftReview({
@@ -1128,6 +1532,7 @@ function DeliveryForm({
     [error, setError] = useState("");
   const [reviewedLoad, setReviewedLoad] = useState(false);
   const [preview, setPreview] = useState("");
+  const [mode, setMode] = useState<"count" | "photo" | "review" | null>(null);
   useEffect(() => {
     if (!file) {
       setPreview("");
@@ -1137,21 +1542,51 @@ function DeliveryForm({
     setPreview(url);
     return () => URL.revokeObjectURL(url);
   }, [file]);
+  useEffect(() => {
+    if (mode || local.state === "loading") return;
+    setMode(file || local.stale ? "review" : "count");
+  }, [local.state, local.stale, file, mode]);
   const short = order.lines.some((l) => counts[l.id] < (l.loaded || 0));
+  const view = local.stale ? "review" : mode || "count";
+  const locked =
+    saving ||
+    local.state === "loading" ||
+    local.state === "error" ||
+    local.stale;
+  const delivered = order.lines.reduce((n, l) => n + (counts[l.id] || 0), 0),
+    released = order.lines.reduce((n, l) => n + (l.loaded || 0), 0);
+  const issues = [
+    ["", "No new discrepancy"],
+    ["Short at delivery", "Short at delivery"],
+    ["Damaged product", "Damaged product"],
+    ["Damaged packaging", "Damaged packaging"],
+  ];
   return (
-    <>
-      <div className="page-heading">
-        <h2>Record what arrived</h2>
-        <p>Safely parked · count physical quantities at this stop.</p>
+    <div className={"driver-delivery view-" + view}>
+      <div className="driver-step-heading">
+        <p className="driver-eyebrow">
+          {view === "count"
+            ? "Step 1 of 2 · Count"
+            : view === "photo"
+              ? "Step 2 of 2 · Photo and save"
+              : "Review retained delivery"}
+        </p>
+        <h2>
+          {view === "count"
+            ? "What did you deliver?"
+            : view === "photo"
+              ? "Take a delivery photo"
+              : "Check quantities and photo"}
+        </h2>
       </div>
-      <Notice>
-        {navigator.onLine
-          ? "Proof is saved on this device before upload."
-          : "Connection unavailable. Save proof now; sync retries when connectivity returns."}
-      </Notice>
       <Notice
         tone={local.state === "error" || local.stale ? "warning" : "info"}
       >
+        <small>
+          {navigator.onLine
+            ? "Proof is saved on this device before upload."
+            : "Connection unavailable. Save proof now; sync retries when connectivity returns."}
+        </small>
         <span role="status">
           {local.state === "loading"
             ? "Opening your local proof draft…"
@@ -1216,128 +1651,200 @@ function DeliveryForm({
           </Button>
         )}
       </Notice>
-      <fieldset
-        disabled={
-          saving ||
-          local.state === "loading" ||
-          local.state === "error" ||
-          local.stale
-        }
-        className="proof-draft-fields"
-      >
-        {order.lines.map((l) => (
-          <Panel className="product-row" key={l.id}>
-            <div className="product-copy">
-              <h3>{l.name}</h3>
-              <p>
-                {l.loaded} released · {l.ordered - (l.loaded || 0)} known not
-                loaded
+      <fieldset disabled={locked} className="proof-draft-fields">
+        {view === "count" && (
+          <Button
+            className="driver-all-delivered"
+            onClick={() => {
+              local.update({
+                quantities: Object.fromEntries(
+                  order.lines.map((l) => [l.id, l.loaded || 0]),
+                ),
+                issue: "",
+              });
+              setMode("photo");
+            }}
+          >
+            <Check size={26} aria-hidden="true" /> All delivered as loaded
+          </Button>
+        )}
+        {view !== "photo" && (
+          <>
+            {view === "count" && (
+              <p className="driver-or">Or adjust what you delivered</p>
+            )}
+            {order.lines.map((l) => (
+              <Panel className="product-row" key={l.id}>
+                <div className="product-copy">
+                  <h3>{l.name}</h3>
+                  <p>
+                    {l.loaded} released · {l.ordered - (l.loaded || 0)} known
+                    not loaded
+                  </p>
+                </div>
+                <Counter
+                  label={"Delivered " + l.name}
+                  value={counts[l.id]}
+                  max={l.loaded || 0}
+                  onChange={(v) =>
+                    local.update({ quantities: { ...counts, [l.id]: v } })
+                  }
+                />
+              </Panel>
+            ))}
+            <Panel>
+              <h3>
+                {short ? "Why is it short? (required)" : "Delivery issue"}
+              </h3>
+              <div
+                className="driver-choice-list driver-issue-list"
+                role="radiogroup"
+                aria-label="Delivery issue"
+              >
+                {issues.map(([value, label]) => (
+                  <label
+                    key={value || "none"}
+                    className={
+                      "driver-choice" + (issue === value ? " selected" : "")
+                    }
+                  >
+                    <input
+                      type="radio"
+                      name={"delivery-issue-" + order.id}
+                      value={value}
+                      checked={issue === value}
+                      onChange={() => local.update({ issue: value })}
+                    />
+                    <span>
+                      <strong>{label}</strong>
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </Panel>
+          </>
+        )}
+        {view === "photo" && (
+          <Panel className="driver-delivery-summary">
+            <p>
+              <strong>
+                {delivered} of {released}
+              </strong>{" "}
+              released units delivered
+            </p>
+            {issue && (
+              <p className="driver-shortage">
+                <TriangleAlert size={18} aria-hidden="true" /> {issue}
               </p>
-            </div>
-            <Counter
-              label={"Delivered " + l.name}
-              value={counts[l.id]}
-              max={l.loaded || 0}
-              onChange={(v) =>
-                local.update({ quantities: { ...counts, [l.id]: v } })
-              }
-            />
+            )}
+            <Button variant="outline" onClick={() => setMode("count")}>
+              Change quantities
+            </Button>
           </Panel>
-        ))}
-        <Panel>
-          <label>
-            Delivery issue
-            <select
-              aria-label="Delivery issue"
-              value={issue}
-              onChange={(e) => local.update({ issue: e.target.value })}
-            >
-              <option value="">No new discrepancy</option>
-              <option>Short at delivery</option>
-              <option>Damaged product</option>
-              <option>Damaged packaging</option>
-            </select>
-          </label>
-          <label className="photo-label">
-            <Camera size={22} /> Delivery photo · JPEG or PNG, up to 5 MB
-            <input
-              aria-label="Delivery photo"
-              type="file"
-              accept="image/jpeg,image/png"
-              capture="environment"
-              onChange={(e) => {
-                const selected = e.target.files?.[0];
-                if (!selected) return;
-                if (
-                  !["image/jpeg", "image/png"].includes(selected.type) ||
-                  selected.size > 5 * 1024 * 1024 ||
-                  !selected.size
-                ) {
-                  setError("Choose a JPEG or PNG photo up to 5 MB.");
-                  e.target.value = "";
-                  return;
-                }
-                setError("");
-                local.update({ photo: selected, photoName: selected.name });
-              }}
-            />
-          </label>
-          {file && (
-            <>
-              <img
-                className="proof-preview"
-                src={preview}
-                alt="Selected delivery evidence preview"
+        )}
+        {view !== "count" && (
+          <Panel>
+            <label className="photo-label driver-camera">
+              <Camera size={32} aria-hidden="true" />
+              {file ? "Retake photo" : "Take delivery photo"}
+              <small>JPEG or PNG, up to 5 MB</small>
+              <input
+                aria-label="Delivery photo"
+                type="file"
+                accept="image/jpeg,image/png"
+                capture="environment"
+                onChange={(e) => {
+                  const selected = e.target.files?.[0];
+                  if (!selected) return;
+                  if (
+                    !["image/jpeg", "image/png"].includes(selected.type) ||
+                    selected.size > 5 * 1024 * 1024 ||
+                    !selected.size
+                  ) {
+                    setError("Choose a JPEG or PNG photo up to 5 MB.");
+                    e.target.value = "";
+                    return;
+                  }
+                  setError("");
+                  local.update({ photo: selected, photoName: selected.name });
+                }}
               />
-              <p>
-                {local.draft.photoName} · {(file.size / 1024).toFixed(0)} KB
-                selected
-              </p>
-            </>
-          )}
-          <small>
-            Photo and physical quantities are retained together. Store receipt
-            is a separate confirmation.
-          </small>
-        </Panel>
+            </label>
+            {file && (
+              <>
+                <img
+                  className="proof-preview"
+                  src={preview}
+                  alt="Selected delivery evidence preview"
+                />
+                <p>
+                  {local.draft.photoName} · {(file.size / 1024).toFixed(0)} KB
+                  selected
+                </p>
+              </>
+            )}
+            <small>
+              Photo and physical quantities are retained together. Store receipt
+              is a separate confirmation.
+            </small>
+          </Panel>
+        )}
       </fieldset>
       {error && <Notice tone="critical">{error}</Notice>}
       <div className="sticky-action">
-        <small>Saved locally before any confirmation</small>
-        <Button
-          disabled={
-            saving ||
-            local.state !== "saved" ||
-            local.stale ||
-            !file ||
-            (short && !issue)
-          }
-          onClick={async () => {
-            setSaving(true);
-            setError("");
-            try {
-              await local.flush();
-              await saveProof(
-                account,
-                order,
-                counts,
-                issue,
-                new File([file!], local.draft.photoName || "proof.png", {
-                  type: file!.type,
-                }),
-              );
-              onSaved();
-              void syncProofs(account.id);
-            } catch (e) {
-              setError(e instanceof Error ? e.message : "Cannot save proof.");
-            } finally {
-              setSaving(false);
-            }
-          }}
-        >
-          {saving ? "Saving evidence…" : "Save proof on this device"}
-        </Button>
+        {view === "count" ? (
+          <>
+            {short && !issue && (
+              <small>Choose why it is short to continue</small>
+            )}
+            <Button
+              disabled={locked || (short && !issue)}
+              onClick={() => setMode("photo")}
+            >
+              Continue to photo <ArrowRight size={22} aria-hidden="true" />
+            </Button>
+          </>
+        ) : (
+          <>
+            <small>Saved locally before any confirmation</small>
+            <Button
+              disabled={
+                saving ||
+                local.state !== "saved" ||
+                local.stale ||
+                !file ||
+                (short && !issue)
+              }
+              onClick={async () => {
+                setSaving(true);
+                setError("");
+                try {
+                  await local.flush();
+                  await saveProof(
+                    account,
+                    order,
+                    counts,
+                    issue,
+                    new File([file!], local.draft.photoName || "proof.png", {
+                      type: file!.type,
+                    }),
+                  );
+                  onSaved();
+                  void syncProofs(account.id);
+                } catch (e) {
+                  setError(
+                    e instanceof Error ? e.message : "Cannot save proof.",
+                  );
+                } finally {
+                  setSaving(false);
+                }
+              }}
+            >
+              {saving ? "Saving evidence…" : "Save proof on this device"}
+            </Button>
+          </>
+        )}
       </div>
-    </>
+    </div>
   );
 }

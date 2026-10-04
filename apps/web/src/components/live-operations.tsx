@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { MapPin, Navigation } from "lucide-react";
 import { api } from "../lib/api";
 import { cachedRead } from "../lib/sync";
+import type { LocationSharing } from "../lib/use-location-sharing";
 import type { Account, Order } from "../lib/models";
 import { RoadMap, type MapPoint, type RoadGeometry } from "./road-map";
 import { Button } from "./ui/button";
@@ -227,7 +229,8 @@ export function NetworkScreen({
     [runState, setRunState] = useState(""),
     [tripSelection, setTripSelection] = useState(""),
     [selection, setSelection] = useState(""),
-    [includeDemo, setIncludeDemo] = useState(false);
+    [includeDemo, setIncludeDemo] = useState(false),
+    [showAllOutlets, setShowAllOutlets] = useState(false);
   useEffect(() => {
     const f = (e: Event) => setPositions((e as CustomEvent<Position[]>).detail);
     window.addEventListener("waypoint-locations", f);
@@ -307,9 +310,10 @@ export function NetworkScreen({
       (includeDemo || !v.demo) &&
       (!depot || v.depot_code === depot) &&
       (!kind || v.kind === kind) &&
-      (!risk || state(v) === risk) &&
+      (fleetOnly || !risk || state(v) === risk) &&
       (!runState || runStatus(v) === runState) &&
-      ((!brand && !district) ||
+      (fleetOnly ||
+        (!brand && !district) ||
         network.trips.some(
           (t) =>
             t.vehicle_id === v.id &&
@@ -331,6 +335,18 @@ export function NetworkScreen({
                   ),
               )),
       ) || network.trips.find((t) => t.vehicle_id === selection);
+  const visibleOutlets = outlets.filter(
+    (o) =>
+      showAllOutlets ||
+      o.id === selection ||
+      (trip
+        ? trip.stops.some((s) => s.outlet_id === o.id)
+        : network.trips.some(
+            (t) =>
+              vehicles.some((v) => v.id === t.vehicle_id) &&
+              t.stops.some((s) => s.outlet_id === o.id),
+          )),
+  );
   const points: MapPoint[] = [
     ...network.depots
       .filter(
@@ -347,7 +363,7 @@ export function NetworkScreen({
         kind: "depot" as const,
         supplemental: d.supplemental,
       })),
-    ...outlets
+    ...visibleOutlets
       .filter((o) => o.longitude != null && o.latitude != null)
       .map((o) => ({
         id: o.id,
@@ -375,6 +391,121 @@ export function NetworkScreen({
         };
       }),
   ];
+  if (fleetOnly)
+    return (
+      <>
+        <div className="page-heading design-heading">
+          <p className="eyebrow">Operations / fleet</p>
+          <h1>Know your available fleet</h1>
+          <p>Vehicle readiness, drivers and capacity for {day} service.</p>
+        </div>
+        <section className="panel filter-bar">
+          <label>
+            Depot
+            <select value={depot} onChange={(e) => setDepot(e.target.value)}>
+              <option value="">All authorized depots</option>
+              {network.depots.map((d) => (
+                <option key={d.code} value={d.code}>
+                  {d.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Vehicle
+            <select value={kind} onChange={(e) => setKind(e.target.value)}>
+              <option value="">All kinds</option>
+              <option>VAN</option>
+              <option>TRUCK</option>
+            </select>
+          </label>
+          <label>
+            Run state
+            <select
+              value={runState}
+              onChange={(e) => setRunState(e.target.value)}
+            >
+              <option value="">All run states</option>
+              {["Unassigned", "Scheduled", "Active", "Completed"].map((r) => (
+                <option key={r}>{r}</option>
+              ))}
+            </select>
+          </label>
+          <label className="check-label">
+            <input
+              type="checkbox"
+              checked={includeDemo}
+              onChange={(e) => setIncludeDemo(e.target.checked)}
+            />
+            Include supplemental fixtures
+          </label>
+        </section>
+        <section className="panel">
+          <h2>
+            {vehicles.length} vehicles ·{" "}
+            {vehicles.filter((v) => v.available).length} available ·{" "}
+            {vehicles.filter((v) => !v.available).length} unavailable
+          </h2>
+          <p className="muted">
+            Availability is recorded fleet readiness. Run state shows
+            assignments on the selected day.
+          </p>
+          <div style={{ overflowX: "auto" }}>
+            <table className="orders-table">
+              <thead>
+                <tr>
+                  <th>Vehicle / depot</th>
+                  <th>Readiness</th>
+                  <th>Driver</th>
+                  <th>Capability</th>
+                  <th>Weight capacity</th>
+                  <th>Volume capacity</th>
+                  <th>Weekly fuel reserved / budget</th>
+                  <th>Daily assignments</th>
+                </tr>
+              </thead>
+              <tbody>
+                {vehicles.map((v) => (
+                  <tr key={v.id}>
+                    <td>
+                      <strong>{v.id}</strong>
+                      <br />
+                      {v.name}
+                      <br />
+                      {v.depot_code}
+                    </td>
+                    <td>
+                      <span className="badge">
+                        {v.available ? "Available" : "Unavailable"}
+                      </span>
+                    </td>
+                    <td>{v.driver_name || "Unassigned"}</td>
+                    <td>
+                      {v.kind} · {v.refrigerated ? "Refrigerated" : "Dry"}
+                    </td>
+                    <td>{Number(v.weight_kg).toFixed(0)} kg</td>
+                    <td>{Number(v.volume_m3).toFixed(1)} m³</td>
+                    <td>
+                      {Number(v.reserved_fuel_l).toFixed(1)} /{" "}
+                      {Number(v.weekly_fuel_l).toFixed(1)} L
+                    </td>
+                    <td>
+                      {runStatus(v)} ·{" "}
+                      {
+                        network.trips.filter((t) => t.vehicle_id === v.id)
+                          .length
+                      }{" "}
+                      trips
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {!vehicles.length && <p>No vehicles match these filters.</p>}
+        </section>
+      </>
+    );
   return (
     <>
       <div className="page-heading design-heading">
@@ -474,6 +605,50 @@ export function NetworkScreen({
           Include supplemental fixtures
         </label>
       </section>
+      <section className="panel">
+        <h2>Delivery operations</h2>
+        <p>
+          {
+            network.trips.filter((t) =>
+              vehicles.some((v) => v.id === t.vehicle_id),
+            ).length
+          }{" "}
+          published trips ·{" "}
+          {vehicles.filter((v) => runStatus(v) === "Active").length} vehicles on
+          active runs ·{" "}
+          {vehicles.filter((v) => state(v) === "Window risk").length} vehicles
+          with window risk
+        </p>
+        <label className="check-label">
+          <input
+            type="checkbox"
+            checked={showAllOutlets}
+            onChange={(e) => setShowAllOutlets(e.target.checked)}
+          />
+          Show all outlets on map
+        </label>
+        <p className="muted">
+          The map focuses on published delivery outlets, or the selected
+          vehicle’s trip. Use Find outlet when map pins overlap.
+        </p>
+        <label>
+          Find outlet
+          <select
+            value={outlet?.id || ""}
+            onChange={(e) => {
+              setSelection(e.target.value);
+              setTripSelection("");
+            }}
+          >
+            <option value="">Select an outlet</option>
+            {outlets.map((o) => (
+              <option key={o.id} value={o.id}>
+                {o.name} · {o.district}
+              </option>
+            ))}
+          </select>
+        </label>
+      </section>
       <div className="network-grid">
         <section className="panel">
           <RoadMap
@@ -483,9 +658,10 @@ export function NetworkScreen({
             label="Authorized depot, outlet and reported vehicle road map"
           />
           <p className="muted">
-            District waypoints are supplemental judge locations. Vehicles
-            without reported coordinates remain in the fleet list. Planned
-            routes use OSRM; no position or road route is inferred.
+            Outlet pins use approximate district waypoints, not verified shop
+            addresses. Zoom in or use Find outlet to distinguish nearby shops.
+            Vehicles without reported coordinates remain in the fleet list.
+            Planned routes use OSRM; no position or road route is inferred.
           </p>
           <div className="fleet-list">
             {vehicles.map((v) => (
@@ -494,7 +670,10 @@ export function NetworkScreen({
                   "fleet-row" + (selection === v.id ? " selected" : "")
                 }
                 key={v.id}
-                onClick={() => setSelection(v.id)}
+                onClick={() => {
+                  setSelection(v.id);
+                  setTripSelection("");
+                }}
               >
                 <strong>{v.id}</strong>
                 <span>
@@ -710,10 +889,13 @@ type Journey = {
 export function DriverJourney({
   account,
   order,
+  sharing,
 }: {
   account: Account;
   order: Order;
+  sharing: LocationSharing;
 }) {
+  const { reporting, setReporting, status, setStatus, position } = sharing;
   const q = useQuery({
     queryKey: [account.id, `/orders/${order.id}/journey`],
     queryFn: () =>
@@ -722,101 +904,6 @@ export function DriverJourney({
     networkMode: "always",
     refetchInterval: navigator.onLine ? 15000 : false,
   });
-  const [reporting, setReporting] = useState(false),
-    [status, setStatus] = useState("Location reporting is off"),
-    [position, setPosition] = useState<Position | null>(null);
-  useEffect(() => {
-    if (!reporting) return;
-    let watch: number | undefined,
-      lastSent = 0,
-      closed = false;
-    const pendingKey = `waypoint-position:${account.id}`;
-    const send = async () => {
-      const raw = sessionStorage.getItem(pendingKey);
-      if (!raw || !navigator.onLine) return;
-      try {
-        const p = JSON.parse(raw);
-        if (Date.now() - Date.parse(p.capturedAt) > 900000) {
-          sessionStorage.removeItem(pendingKey);
-          setStatus("Expired position discarded; waiting for a fresh capture");
-          return;
-        }
-        const accepted = await api<Position>("/location", p);
-        if (sessionStorage.getItem(pendingKey) === raw)
-          sessionStorage.removeItem(pendingKey);
-        if (!closed) {
-          setPosition((current) =>
-            current?.capturedAt &&
-            Date.parse(current.capturedAt) > Date.parse(accepted.capturedAt)
-              ? current
-              : accepted,
-          );
-          setStatus(
-            accepted.accuracy > 100
-              ? "Location accepted · poor accuracy; approximate position"
-              : "Location accepted by the dispatcher",
-          );
-          void q.refetch();
-        }
-      } catch (e) {
-        if (!closed)
-          setStatus(`Position queued on this tab: ${(e as Error).message}`);
-      }
-    };
-    if (!navigator.geolocation) {
-      setStatus("This browser cannot report location");
-      setReporting(false);
-      return;
-    }
-    watch = navigator.geolocation.watchPosition(
-      (p) => {
-        const next = {
-          orderId: order.id,
-          vehicleId: order.run!.vehicle_id,
-          longitude: p.coords.longitude,
-          latitude: p.coords.latitude,
-          accuracy: p.coords.accuracy,
-          capturedAt: new Date(p.timestamp).toISOString(),
-          simulated: false,
-        };
-        setPosition({ ...next, receivedAt: "" });
-        setStatus(
-          !navigator.onLine
-            ? "Position captured · queued on this tab while offline"
-            : next.accuracy > 100
-              ? "Poor accuracy; location is approximate"
-              : "Position captured",
-        );
-        sessionStorage.setItem(pendingKey, JSON.stringify(next));
-        if (Date.now() - lastSent > 10000) {
-          lastSent = Date.now();
-          void send();
-        }
-      },
-      (e) => {
-        setStatus(
-          e.code === 1
-            ? "Location permission denied. Enable permission to report."
-            : e.code === 2
-              ? "Location unavailable; last accepted position may become stale"
-              : "Location capture timed out",
-        );
-        if (e.code === 1) setReporting(false);
-      },
-      { enableHighAccuracy: true, maximumAge: 10000, timeout: 20000 },
-    );
-    const timer = setInterval(send, 10000);
-    window.addEventListener("online", send);
-    return () => {
-      closed = true;
-      if (watch !== undefined) navigator.geolocation.clearWatch(watch);
-      clearInterval(timer);
-      window.removeEventListener("online", send);
-    };
-  }, [reporting, order.id, order.run?.vehicle_id, account.id]);
-  useEffect(() => {
-    if (!["IN_TRANSIT", "ARRIVED"].includes(order.status)) setReporting(false);
-  }, [order.status]);
   const journey = q.data;
   if (!journey)
     return (
@@ -854,6 +941,20 @@ export function DriverJourney({
   return (
     <section className="panel driver-journey">
       <h2>Your road journey</h2>
+      {journey.destination.longitude != null &&
+      journey.destination.latitude != null ? (
+        <a
+          className="button-link driver-navigate"
+          href={`https://www.google.com/maps/dir/?api=1&destination=${journey.destination.latitude},${journey.destination.longitude}&travelmode=driving`}
+          target="_blank"
+          rel="noreferrer"
+        >
+          <Navigation size={24} aria-hidden="true" />
+          Navigate to this stop
+        </a>
+      ) : (
+        <p>No destination coordinates available.</p>
+      )}
       {journey.trip.geometry ? (
         <RoadMap
           points={points}
@@ -875,19 +976,6 @@ export function DriverJourney({
           {journey.timing.message}
         </p>
       )}
-      {journey.destination.longitude != null &&
-      journey.destination.latitude != null ? (
-        <a
-          className="button-link"
-          href={`https://www.google.com/maps/dir/?api=1&destination=${journey.destination.latitude},${journey.destination.longitude}&travelmode=driving`}
-          target="_blank"
-          rel="noreferrer"
-        >
-          Open directions to this waypoint
-        </a>
-      ) : (
-        <p>No destination coordinates available.</p>
-      )}
       {journey.destination.supplemental && (
         <small>
           Supplemental judge waypoint; confirm the actual outlet address before
@@ -896,35 +984,60 @@ export function DriverJourney({
       )}
       {["IN_TRANSIT", "ARRIVED"].includes(order.status) && (
         <>
-          <Button
-            variant="outline"
-            onClick={() => {
-              setReporting(!reporting);
-              if (reporting)
-                setStatus(
-                  "Reporting stopped; last accepted position will expire",
-                );
-            }}
-          >
-            {reporting ? "Stop location reporting" : "Start location reporting"}
-          </Button>
-          <p role="status">{status}</p>
-          {p?.capturedAt && (
-            <p className="muted">
-              Captured {time(p.capturedAt)} · ±{Math.round(p.accuracy)} m{" "}
-              {p.accuracy > 100 && "· Poor accuracy "}
-              {Date.now() - Date.parse(p.capturedAt) > 90000 &&
-                "· Stale last report "}
-              {p.receivedAt
-                ? `· server accepted ${time(p.receivedAt)}`
-                : "· awaiting server acceptance"}
-            </p>
-          )}
-          <small>
-            Keep this tab open. Browser background suspension can interrupt
-            reporting. Only the latest position is queued in this tab; reports
-            older than 15 minutes expire.
-          </small>
+          <div className="driver-location-row">
+            <span
+              className={
+                "driver-chip " +
+                (!reporting
+                  ? "paused"
+                  : position && position.accuracy > 100
+                    ? "weak"
+                    : "sharing")
+              }
+            >
+              <MapPin size={20} aria-hidden="true" />
+              {!reporting
+                ? "Location paused"
+                : position && position.accuracy > 100
+                  ? "Weak GPS"
+                  : "Sharing location"}
+            </span>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setReporting(!reporting);
+                if (reporting)
+                  setStatus(
+                    "Reporting stopped; last accepted position will expire",
+                  );
+              }}
+            >
+              {reporting ? "Stop sharing" : "Share location"}
+            </Button>
+          </div>
+          <p role="status" className="driver-meta">
+            {status}
+          </p>
+          <details>
+            <summary>Location details</summary>
+            {p?.capturedAt && (
+              <p className="muted">
+                Captured {time(p.capturedAt)} · ±{Math.round(p.accuracy)} m{" "}
+                {p.accuracy > 100 && "· Poor accuracy "}
+                {Date.now() - Date.parse(p.capturedAt) > 90000 &&
+                  "· Stale last report "}
+                {p.receivedAt
+                  ? `· server accepted ${time(p.receivedAt)}`
+                  : "· awaiting server acceptance"}
+              </p>
+            )}
+            <small>
+              Keep this tab open. Browser background suspension can interrupt
+              reporting. Only the latest position is queued in this tab; reports
+              older than 15 minutes expire. Sharing also lets the app notice
+              when the vehicle is moving and lock data entry.
+            </small>
+          </details>
         </>
       )}
       {journey.judgeSimulatorEnabled &&

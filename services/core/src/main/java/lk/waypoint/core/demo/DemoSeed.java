@@ -27,6 +27,7 @@ public class DemoSeed implements CommandLineRunner {
         outlet("DEMO-STYLE","Demo Style · Mall access","STYLE","VAN_ONLY","10:00","12:00");
         outlet("DEMO-TECH","Demo Tech · Protected receiving","TECH","ANY","09:00","16:00");
         outlet("DEMO-OUTSIDE","Demo outside manager scope","TECH","ANY","09:00","16:00");
+        jdbc.update("update outlets set dock_type=case when id='DEMO-STYLE' then 'mall_bay' else 'street' end where demo and dock_type is null");
         for(String id: new String[]{"DEMO-FRESH","DEMO-STYLE","DEMO-TECH"}) jdbc.update("insert into account_outlets values('DEMO-MANAGER',?) on conflict do nothing",id);
         product("DEMO-RICE","Rice cartons","FRESH","carton",20,0.04,"AMBIENT",null,null,"Keep dry");
         product("DEMO-MILK","Chilled milk crates","FRESH","crate",12,0.03,"CHILLED",2.0,5.0,"Keep chilled 2–5°C");
