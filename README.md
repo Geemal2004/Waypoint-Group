@@ -78,6 +78,8 @@ Restart restores the six legacy fixtures and 85 S1 orders when the private plann
 
 ## Development and checks
 
+[GitHub Actions CI/CD](docs/ci-cd.md) checks pushes and pull requests and deploys successful `main` revisions to the competition Lightsail environment. Deployment requires the environment SSH secrets; private datasets stay on the server.
+
 React/TypeScript/Vite, Tailwind, shadcn-style Button/CVA, TanStack Query, Workbox and Dexie; Spring Boot/Java 21; FastAPI assisted insertion; PostgreSQL/PostGIS, Redis and OSRM. ML dependencies remain deferred with ML integration; Kafka is absent.
 
 Frontend: `cd apps/web; npm ci; npm run dev` proxies `/api` to port 8081. Backend: Java 21/Maven, `cd services/core; mvn verify -Pintegration` uses disposable Testcontainers PostgreSQL (Docker required). Planning: Python 3.12, install requirements then `python -m pytest`.
