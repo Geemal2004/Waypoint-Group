@@ -1,5 +1,5 @@
 import { api, ApiError } from "./api";
-import { offlineDb, type OutboxAction } from "./offline-db";
+import { offlineDb, type OutboxAction, type ProofDraft } from "./offline-db";
 import type { Account, Order } from "./models";
 
 const activeKey = "waypoint-active-account";
@@ -56,7 +56,12 @@ export async function saveProof(
   quantities: Record<string, number>,
   issue: string,
   file: File,
+  retainedDraft?: ProofDraft,
 ) {
+  if (activeAccountId() !== account.id)
+    throw new Error(
+      "Account changed. Reopen this workspace before saving proof.",
+    );
   if (
     !["image/jpeg", "image/png"].includes(file.type) ||
     file.size > 5 * 1024 * 1024
@@ -91,6 +96,7 @@ export async function saveProof(
     "rw",
     offlineDb.outbox,
     offlineDb.attachments,
+    offlineDb.proofDrafts,
     async () => {
       const pending = await offlineDb.outbox
         .where("accountId")
@@ -104,6 +110,23 @@ export async function saveProof(
         throw new Error(
           "Proof for this stop is already saved. Check its sync status below.",
         );
+      if (retainedDraft) {
+        const kept = await offlineDb.proofDrafts.get(retainedDraft.key);
+        if (
+          !kept ||
+          kept.accountId !== account.id ||
+          kept.orderId !== order.id ||
+          kept.updatedAt !== retainedDraft.updatedAt ||
+          kept.expectedVersion !== retainedDraft.expectedVersion ||
+          JSON.stringify(kept.quantities) !==
+            JSON.stringify(retainedDraft.quantities) ||
+          kept.issue !== retainedDraft.issue ||
+          kept.photoName !== retainedDraft.photoName
+        )
+          throw new Error(
+            "The local draft changed. Reopen Sync and review the retained evidence again.",
+          );
+      }
       await offlineDb.outbox.add(action);
       await offlineDb.attachments.add({
         id: actionId,
@@ -111,6 +134,11 @@ export async function saveProof(
         accountId: account.id,
         blob: file,
       });
+      // Move the draft to the immutable outbox in the same local transaction.
+      await offlineDb.proofDrafts
+        .where("[accountId+orderId]")
+        .equals([account.id, order.id])
+        .delete();
     },
   );
   return actionId;

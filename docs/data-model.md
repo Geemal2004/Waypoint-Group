@@ -1,5 +1,9 @@
 # Implemented data model
 
+The device database `waypoint-offline` uses Dexie schema v3. `proofDrafts` stores account/stop key, expected order version, quantities, issue, original photo blob/name and draft update time. Drafts are separate from outbox actions and never sync automatically. Explicit final save creates the action and attachment and deletes the draft in one transaction. Earlier outbox, attachment and cache tables are preserved during upgrade. A mismatched order version blocks draft submission until reviewed/discarded. Draft update time is distinct from the finalized action's capture time.
+
+Explicit current-load review preserves the photo, quantities and issue while adopting the reviewed order version, provided retained lines and quantities still fit the released load. For a deferred stop, Sync exposes the unsent draft and transfers its original version and evidence into an immutable action for dispatcher conflict review. The local transaction checks the reviewed draft snapshot before removing it. Neither path automatically accepts delivery, clears deferral history or confirms a store receipt.
+
 Flyway V1–V7 run automatically. PostgreSQL constraints enforce identity, quantity bounds and relationships. Timestamps are UTC; operating dates/windows use Asia/Colombo. Device capture and server acceptance times remain separate.
 
 | Table | Relationships and fields |

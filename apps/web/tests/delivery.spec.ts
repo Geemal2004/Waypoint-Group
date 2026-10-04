@@ -1,4 +1,10 @@
-import { test, expect, type Page, type Browser } from "@playwright/test";
+import {
+  test,
+  expect,
+  type Page,
+  type Browser,
+  type Route,
+} from "@playwright/test";
 const png = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=",
   "base64",
@@ -77,6 +83,7 @@ async function proof(p: Page) {
   await p
     .getByRole("button", { name: "Save proof on this device", exact: true })
     .click();
+  await expect(p.getByLabel("Delivery photo", { exact: true })).toHaveCount(0);
   await p.getByRole("button", { name: "Sync", exact: true }).click();
 }
 async function store(p: Page, outlet: string, ref: string) {
@@ -103,6 +110,9 @@ async function manual(p: Page, refs: string[], vehicle: string) {
   await expect(
     board.getByRole("button", { name: "Publish validated plan", exact: true }),
   ).toBeEnabled();
+  await expect(
+    board.getByRole("region", { name: "Publication review" }),
+  ).toBeVisible();
   await board
     .getByRole("button", { name: "Publish validated plan", exact: true })
     .click();
@@ -380,7 +390,8 @@ test("reviewed store drafts produce a versioned multi-stop road journey with liv
       commandId: crypto.randomUUID(),
       expectedVersion: before.version,
       operation: "AMEND",
-      reason: "One additional carton reviewed before loading",
+      // Maximum-length reviewed reasons remain valid during automatic republication.
+      reason: "One additional carton reviewed before loading".padEnd(500, "."),
       day,
       items: [{ productId: "DEMO-RICE", quantity: 11 }],
     });
@@ -540,22 +551,261 @@ test("public regression fixture retains offline proof and resolves a same-stop c
     order = await call(v, `/orders/${order.id}/start`, {
       expectedVersion: order.version,
     });
+    // A real server-side arrival increments the stop version before any form edit.
+    await v.reload();
+    await assigned(v, "Assigned stop", order.id);
+    await expect(v.getByLabel("Delivery photo", { exact: true })).toHaveCount(
+      0,
+    );
+    const beforeArrival = order.version;
     order = await call(v, `/orders/${order.id}/arrive`, {
       expectedVersion: order.version,
     });
-    await v.reload();
-    await assigned(v, "Assigned stop", order.id);
+    expect(order.version).toBeGreaterThan(beforeArrival);
+    await expect(
+      v.getByLabel("Delivered Rice cartons quantity", { exact: true }),
+    ).toBeEnabled();
+    await expect(
+      v.getByLabel("Delivered Rice cartons quantity", { exact: true }),
+    ).toHaveValue("4");
+    await expect(
+      v.getByText(/The stop changed since this draft was recorded/),
+    ).toHaveCount(0);
     await expect(v.getByLabel("Delivery photo", { exact: true })).toBeVisible();
     await v.evaluate(async () => {
       await navigator.serviceWorker.ready;
     });
+    const driverAccount = await v.evaluate(() =>
+      localStorage.getItem("waypoint-active-account"),
+    );
+    await v.addInitScript(() => {
+      const get = IDBObjectStore.prototype.get;
+      IDBObjectStore.prototype.get = function (key) {
+        const request = get.call(this, key);
+        if (
+          this.name === "proofDrafts" &&
+          !localStorage.getItem("waypoint-account-guard-tested")
+        ) {
+          request.addEventListener(
+            "success",
+            () => {
+              localStorage.setItem("waypoint-account-guard-tested", "true");
+              localStorage.setItem(
+                "waypoint-active-account",
+                "changed-during-draft-open",
+              );
+            },
+            { once: true },
+          );
+        }
+        return request;
+      };
+    });
+    await v.reload();
+    await expect(
+      v.getByText(
+        "Account changed. Reopen this workspace with the same driver. Your local evidence is retained.",
+        { exact: true },
+      ),
+    ).toBeVisible();
+    await expect(
+      v.getByText("Opening your local proof draft…", { exact: true }),
+    ).toHaveCount(0);
+    await v.evaluate(
+      (id) => localStorage.setItem("waypoint-active-account", id!),
+      driverAccount,
+    );
     await v.reload();
     await assigned(v, "Assigned stop", order.id);
     await expect(v.getByLabel("Delivery photo", { exact: true })).toBeVisible();
+    // No server command changes an arrived order's version, so the poll simulates one.
+    const ordersList = (url: URL) => url.pathname === "/api/v1/orders";
+    const bumpVersion = async (route: Route) => {
+      const response = await route.fetch();
+      const json = (await response.json()).map((o: any) =>
+        o.id === order.id
+          ? {
+              ...o,
+              version: o.version + 1,
+              lines: o.lines.map((l: any) => ({ ...l, name: "Probe cartons" })),
+            }
+          : o,
+      );
+      await route.fulfill({ response, json });
+    };
+    await contexts[3].route(ordersList, bumpVersion);
+    const probe = v.getByLabel("Delivered Probe cartons quantity", {
+      exact: true,
+    });
+    await expect(probe).toBeEnabled();
+    await expect(probe).toHaveValue("4");
+    await expect(
+      v.getByText(/The stop changed since this draft was recorded/),
+    ).toHaveCount(0);
+    await expect(
+      v.getByRole("button", { name: "Discard local draft", exact: true }),
+    ).toHaveCount(0);
+    await contexts[3].unroute(ordersList, bumpVersion);
+    await expect(
+      v.getByLabel("Delivered Rice cartons quantity", { exact: true }),
+    ).toBeEnabled();
     await contexts[3].setOffline(true);
     await v.reload();
     await assigned(v, "Assigned stop", order.id);
-    await proof(v);
+    await v
+      .getByLabel("Delivered Rice cartons quantity", { exact: true })
+      .fill("3");
+    await v
+      .getByLabel("Delivery issue", { exact: true })
+      .selectOption("Short at delivery");
+    await v.getByLabel("Delivery photo", { exact: true }).setInputFiles({
+      name: "draft-proof.png",
+      mimeType: "image/png",
+      buffer: png,
+    });
+    await expect(
+      v.getByText("Draft saved on this device · not submitted", {
+        exact: true,
+      }),
+    ).toBeVisible();
+    // Emulate a retained draft from an older stop version; never rebase it silently.
+    await v.evaluate(async () => {
+      const request = indexedDB.open("waypoint-offline");
+      const db = await new Promise<IDBDatabase>((resolve, reject) => {
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      });
+      const tx = db.transaction("proofDrafts", "readwrite");
+      const all = tx.objectStore("proofDrafts").getAll();
+      await new Promise<void>((resolve, reject) => {
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error);
+        all.onsuccess = () => {
+          const kept = all.result[0];
+          tx.objectStore("proofDrafts").put({
+            ...kept,
+            expectedVersion: kept.expectedVersion - 1,
+          });
+        };
+      });
+      db.close();
+    });
+    await v.reload();
+    await assigned(v, "Assigned stop", order.id);
+    await expect(
+      v.getByText(/The stop changed since this draft was recorded/),
+    ).toBeVisible();
+    await expect(
+      v.getByRole("button", { name: "Save proof on this device", exact: true }),
+    ).toBeDisabled();
+    await expect(
+      v.getByAltText("Selected delivery evidence preview"),
+    ).toBeVisible();
+    const recover = v.getByRole("button", {
+      name: "Keep evidence and use reviewed load",
+      exact: true,
+    });
+    await expect(recover).toBeDisabled();
+    await v
+      .getByRole("checkbox", {
+        name: "I reviewed the retained quantities and photo against the current released load",
+        exact: true,
+      })
+      .check();
+    await recover.click();
+    await expect(
+      v.getByText("Draft saved on this device · not submitted", {
+        exact: true,
+      }),
+    ).toBeVisible();
+    await expect(
+      v.getByLabel("Delivered Rice cartons quantity", { exact: true }),
+    ).toHaveValue("3");
+    await expect(
+      v.getByAltText("Selected delivery evidence preview"),
+    ).toBeVisible();
+    const reviewed = await v.evaluate(async () => {
+      const request = indexedDB.open("waypoint-offline");
+      const db = await new Promise<IDBDatabase>((resolve) => {
+        request.onsuccess = () => resolve(request.result);
+      });
+      const read = db
+        .transaction("proofDrafts")
+        .objectStore("proofDrafts")
+        .getAll();
+      const drafts = await new Promise<any[]>((resolve) => {
+        read.onsuccess = () => resolve(read.result);
+      });
+      const kept = drafts[0];
+      const bytes = Array.from(new Uint8Array(await kept.photo.arrayBuffer()));
+      db.close();
+      return {
+        bytes,
+        name: kept.photoName,
+        issue: kept.issue,
+        version: kept.expectedVersion,
+      };
+    });
+    expect(reviewed).toEqual({
+      bytes: Array.from(png),
+      name: "draft-proof.png",
+      issue: "Short at delivery",
+      version: order.version,
+    });
+    await expect(
+      v.getByText("Draft saved on this device · not submitted", {
+        exact: true,
+      }),
+    ).toBeVisible();
+    await v.reload();
+    await assigned(v, "Assigned stop", order.id);
+    await expect(
+      v.getByLabel("Delivered Rice cartons quantity", { exact: true }),
+    ).toHaveValue("3");
+    await expect(v.getByLabel("Delivery issue", { exact: true })).toHaveValue(
+      "Short at delivery",
+    );
+    await expect(
+      v.getByAltText("Selected delivery evidence preview"),
+    ).toBeVisible();
+    await v.getByRole("button", { name: "Sync", exact: true }).click();
+    await expect(
+      v.getByText("No proof saved on this device yet."),
+    ).toBeVisible();
+    await v.getByRole("button", { name: "Stop proof", exact: true }).click();
+    await expect(
+      v.getByAltText("Selected delivery evidence preview"),
+    ).toBeVisible();
+    // A real server deferral changes an unsent draft's stop before final save.
+    await call(d, `/orders/${order.id}/defer`, {
+      expectedVersion: order.version,
+      nextDay: "2026-10-12",
+      reason:
+        "CI same-stop deferral while unsent physical evidence remains on the device",
+    });
+    await contexts[3].setOffline(false);
+    await v.getByRole("button", { name: "Sync", exact: true }).click();
+    const retainedDraft = v.getByRole("region", {
+      name: "Retained draft for deferred stop",
+    });
+    await expect(retainedDraft).toBeVisible();
+    await expect(
+      retainedDraft.getByAltText("Retained draft evidence preview"),
+    ).toBeVisible();
+    await expect(retainedDraft).toContainText("Short at delivery");
+    await contexts[3].setOffline(true);
+    await retainedDraft
+      .getByRole("button", {
+        name: "Save retained draft for dispatcher review",
+        exact: true,
+      })
+      .click();
+    await expect(retainedDraft).toHaveCount(0);
+    await expect(
+      v.getByText(`${order.reference} · Saved on device · pending sync`, {
+        exact: true,
+      }),
+    ).toBeVisible();
     await v.reload();
     await v.getByRole("button", { name: "Sync", exact: true }).click();
     await expect(
@@ -563,11 +813,54 @@ test("public regression fixture retains offline proof and resolves a same-stop c
         exact: true,
       }),
     ).toBeVisible();
-    await call(d, `/orders/${order.id}/defer`, {
-      expectedVersion: order.version,
-      nextDay: "2026-10-12",
-      reason:
-        "CI same-stop conflict while physical proof remains on the device",
+    const localState = await v.evaluate(async () => {
+      const request = indexedDB.open("waypoint-offline");
+      const db = await new Promise<IDBDatabase>((resolve, reject) => {
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      });
+      const tx = db.transaction(
+        ["proofDrafts", "outbox", "attachments"],
+        "readonly",
+      );
+      const retained = Promise.all(
+        ["outbox", "attachments"].map(
+          (name) =>
+            new Promise<any[]>((resolve, reject) => {
+              const read = tx.objectStore(name).getAll();
+              read.onsuccess = () => resolve(read.result);
+              read.onerror = () => reject(read.error);
+            }),
+        ),
+      );
+      const counts = await Promise.all(
+        ["proofDrafts", "outbox", "attachments"].map(
+          (name) =>
+            new Promise<number>((resolve, reject) => {
+              const count = tx.objectStore(name).count();
+              count.onsuccess = () => resolve(count.result);
+              count.onerror = () => reject(count.error);
+            }),
+        ),
+      );
+      const [actions, attachments] = await retained;
+      db.close();
+      return {
+        counts,
+        version: actions[0].expectedVersion,
+        lines: actions[0].payload.lines,
+        issue: actions[0].payload.issue,
+        bytes: Array.from(
+          new Uint8Array(await attachments[0].blob.arrayBuffer()),
+        ),
+      };
+    });
+    expect(localState).toEqual({
+      counts: [0, 1, 1],
+      version: order.version,
+      lines: [{ lineId: order.lines[0].id, quantity: 3 }],
+      issue: "Short at delivery",
+      bytes: Array.from(png),
     });
     await contexts[3].setOffline(false);
     await expect(
@@ -598,9 +891,258 @@ test("public regression fixture retains offline proof and resolves a same-stop c
       .poll(async () => (await call(m, `/orders/${order.id}`)).status)
       .toBe("RECEIVED_AT_STORE");
     expect((await call(m, `/orders/${order.id}`)).deferrals).toHaveLength(1);
+    expect((await call(m, `/orders/${order.id}`)).lines[0].received).toBe(3);
     await noOverflow(v);
   } finally {
     for (const c of contexts) await c.close();
+  }
+});
+
+test("offline database upgrade preserves earlier proof actions and attachments", async ({
+  browser,
+  baseURL,
+}) => {
+  test.skip(
+    process.env.PUBLIC_CI_FIXTURES !== "true",
+    "Isolated public-fixture acceptance only",
+  );
+  const context = await browser.newContext();
+  const p = await context.newPage();
+  try {
+    const root = new URL("/", baseURL).href;
+    await p.route(root, (route) =>
+      route.fulfill({
+        contentType: "text/html",
+        body: "<!doctype html><title>Storage upgrade fixture</title>",
+      }),
+    );
+    await p.goto(root);
+    await p.evaluate(async () => {
+      // Dexie schema version 2 maps to native IndexedDB version 20.
+      const request = indexedDB.open("waypoint-offline", 20);
+      request.onupgradeneeded = () => {
+        const db = request.result;
+        const outbox = db.createObjectStore("outbox", { keyPath: "actionId" });
+        for (const name of ["accountId", "entityId", "capturedAt"])
+          outbox.createIndex(name, name);
+        outbox.createIndex("[accountId+syncState]", ["accountId", "syncState"]);
+        const attachments = db.createObjectStore("attachments", {
+          keyPath: "id",
+        });
+        for (const name of ["accountId", "actionId"])
+          attachments.createIndex(name, name);
+        db.createObjectStore("cache", { keyPath: "key" }).createIndex(
+          "accountId",
+          "accountId",
+        );
+        outbox.add({
+          actionId: "v2-retained-proof",
+          accountId: "DEMO-DRIVER",
+          actionType: "DELIVERY_PROOF",
+          entityId: "v2-fixture-stop",
+          expectedVersion: 1,
+          payload: {},
+          capturedAt: "2026-10-04T00:00:00Z",
+          syncState: "rejected",
+          retryCount: 0,
+          message: "Earlier evidence retained through storage upgrade",
+        });
+        attachments.add({
+          id: "v2-retained-proof",
+          actionId: "v2-retained-proof",
+          accountId: "DEMO-DRIVER",
+          blob: new Blob(["v2-proof-bytes"], { type: "image/png" }),
+        });
+      };
+      const db = await new Promise<IDBDatabase>((resolve, reject) => {
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      });
+      db.close();
+    });
+    await p.unroute(root);
+    await login(p, "driver");
+    await p.getByRole("button", { name: "Sync", exact: true }).click();
+    await expect(
+      p.getByText("Earlier evidence retained through storage upgrade", {
+        exact: true,
+      }),
+    ).toBeVisible();
+    const retained = await p.evaluate(async () => {
+      const request = indexedDB.open("waypoint-offline");
+      const db = await new Promise<IDBDatabase>((resolve, reject) => {
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      });
+      const tx = db.transaction("attachments", "readonly");
+      const read = tx.objectStore("attachments").get("v2-retained-proof");
+      const attachment = await new Promise<any>((resolve, reject) => {
+        read.onsuccess = () => resolve(read.result);
+        read.onerror = () => reject(read.error);
+      });
+      const result = {
+        version: db.version,
+        draftStore: db.objectStoreNames.contains("proofDrafts"),
+        bytes: await attachment.blob.text(),
+      };
+      db.close();
+      return result;
+    });
+    expect(retained).toEqual({
+      version: 30,
+      draftStore: true,
+      bytes: "v2-proof-bytes",
+    });
+  } finally {
+    await context.close();
+  }
+});
+
+test("publication review follows validation and disappears after a draft edit", async ({
+  browser,
+}) => {
+  const context = await browser.newContext();
+  const p = await context.newPage();
+  let published: any;
+  try {
+    // UI contract fixtures only: real road/constraint validation is covered by integration tests.
+    await p.route("**/api/v1/planning?*", (route) =>
+      route.fulfill({
+        json: {
+          version: 0,
+          trips: [],
+          coordinatePolicy: "UI test fixture",
+          vehicles: [
+            {
+              id: "DEMO-VAN",
+              weight_kg: 300,
+              volume_m3: 3,
+              kind: "VAN",
+              refrigerated: false,
+            },
+          ],
+          orders: ["A", "B"].map((ref) => ({
+            id: `fixture-${ref}`,
+            reference: `CI-${ref}`,
+            source_ref: "",
+            outlet_name: `CI outlet ${ref}`,
+            brand_code: "FRESH",
+            district: "Colombo",
+            temperature: "AMBIENT",
+            status: "RECEIVED",
+            version: 0,
+            weight_kg: 80,
+            volume_m3: 0.16,
+            service_minutes: 15,
+            window_start: "05:00",
+            window_end: "08:00",
+            consecutive_skips: 0,
+            days_since_last_served: 1,
+          })),
+        },
+      }),
+    );
+    await p.route("**/api/v1/planning/validate", (route) =>
+      route.fulfill({
+        json: {
+          valid: true,
+          failures: [],
+          trips: [
+            {
+              vehicleId: "DEMO-VAN",
+              trip: 1,
+              weightKg: 160,
+              volumeM3: 0.32,
+              capacityKg: 300,
+              capacityM3: 3,
+              distanceKm: 10,
+              fuelL: 2.5,
+              returnAt: "2026-01-08T06:00:00+05:30",
+              bookletMinutes: 140,
+              geometry: {
+                type: "LineString",
+                coordinates: [
+                  [79.865, 6.94],
+                  [79.868, 6.95],
+                ],
+              },
+              stops: ["A", "B"].map((ref, i) => ({
+                orderId: `fixture-${ref}`,
+                sequence: i + 1,
+                loadingSequence: 2 - i,
+                arrivalAt: "2026-01-08T05:00:00+05:30",
+                serviceStart: "2026-01-08T05:00:00+05:30",
+                serviceEnd: "2026-01-08T05:15:00+05:30",
+              })),
+            },
+          ].flatMap((metric) => [
+            { ...metric, vehicleId: "DEMO-OTHER", fuelL: 7.25 },
+            { ...metric, trip: 2, fuelL: 9.75 },
+            metric,
+          ]),
+        },
+      }),
+    );
+    await p.route("**/api/v1/planning/publish", (route) => {
+      published = route.request().postDataJSON();
+      return route.fulfill({ json: { version: 1 } });
+    });
+    await login(p, "dispatcher");
+    const board = p.getByRole("region", {
+      name: "Dataset multi-stop planning",
+    });
+    for (const ref of ["A", "B"])
+      await board.getByLabel(`Select CI-${ref}`, { exact: true }).check();
+    await board
+      .getByRole("button", { name: "Assign selected manually", exact: true })
+      .click();
+    await board.getByLabel("Vehicle", { exact: true }).selectOption("DEMO-VAN");
+    const publish = board.getByRole("button", {
+      name: "Publish validated plan",
+      exact: true,
+    });
+    await expect(publish).toBeDisabled();
+    await board
+      .getByRole("button", { name: "Validate road routes", exact: true })
+      .click();
+    const review = board.getByRole("region", { name: "Publication review" });
+    await expect(review).toContainText("2 assigned orders");
+    await expect(review).toContainText("2.50 L");
+    await expect(board.getByText("2.50 L fuel", { exact: true })).toBeVisible();
+    await expect(review).not.toContainText("7.25 L");
+    await expect(review).not.toContainText("9.75 L");
+    await expect(review).toContainText("CI-A");
+    await expect(review).toContainText("CI-B");
+    await board
+      .getByLabel("Publication reason", { exact: true })
+      .fill("Reviewed quantities and handoff order");
+    await expect(review).toHaveCount(0);
+    await expect(publish).toBeDisabled();
+    expect(published).toBeUndefined();
+    await board.getByLabel("Publication reason", { exact: true }).fill("   ");
+    await board
+      .getByRole("button", { name: "Validate road routes", exact: true })
+      .click();
+    await expect(publish).toBeDisabled();
+    await expect(
+      board.getByText("Enter a publication reason of 1–500 characters.", {
+        exact: true,
+      }),
+    ).toBeVisible();
+    await board
+      .getByLabel("Publication reason", { exact: true })
+      .fill("Reviewed quantities and handoff order");
+    await board
+      .getByRole("button", { name: "Validate road routes", exact: true })
+      .click();
+    await expect(review).toBeVisible();
+    await publish.click();
+    await expect
+      .poll(() => published?.trips[0]?.stops.map((s: any) => s.orderId))
+      .toEqual(["fixture-A", "fixture-B"]);
+    await expect(review).toHaveCount(0);
+  } finally {
+    await context.close();
   }
 });
 

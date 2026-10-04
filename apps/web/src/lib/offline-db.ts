@@ -22,9 +22,21 @@ export interface ProofAttachment {
   accountId: string;
   blob: Blob;
 }
+export interface ProofDraft {
+  key: string;
+  accountId: string;
+  orderId: string;
+  expectedVersion: number;
+  quantities: Record<string, number>;
+  issue: string;
+  photo?: Blob;
+  photoName?: string;
+  updatedAt: string;
+}
 export const offlineDb = new Dexie("waypoint-offline") as Dexie & {
   outbox: EntityTable<OutboxAction, "actionId">;
   attachments: EntityTable<ProofAttachment, "id">;
+  proofDrafts: EntityTable<ProofDraft, "key">;
   cache: EntityTable<
     { key: string; accountId: string; value: unknown; savedAt: string },
     "key"
@@ -38,4 +50,10 @@ offlineDb.version(2).stores({
   outbox: "actionId, accountId, [accountId+syncState], entityId, capturedAt",
   attachments: "id, actionId, accountId",
   cache: "key, accountId",
+});
+offlineDb.version(3).stores({
+  outbox: "actionId, accountId, [accountId+syncState], entityId, capturedAt",
+  attachments: "id, actionId, accountId",
+  cache: "key, accountId",
+  proofDrafts: "key, accountId, [accountId+orderId]",
 });

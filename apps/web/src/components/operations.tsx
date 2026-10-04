@@ -11,8 +11,13 @@ import {
 import { Button } from "./ui/button";
 import { api } from "../lib/api";
 import type { Account, Catalog, Order, Vehicle, Conflict } from "../lib/models";
-import { offlineDb, type OutboxAction } from "../lib/offline-db";
+import {
+  offlineDb,
+  type OutboxAction,
+  type ProofDraft,
+} from "../lib/offline-db";
 import { saveProof, syncProofs } from "../lib/sync";
+import { useProofDraft } from "../lib/proof-draft";
 import { PlanningBoard } from "./planning-workspace";
 import {
   NetworkScreen,
@@ -717,17 +722,22 @@ export function Driver({
 }) {
   const [selected, setSelected] = useState(""),
     [outbox, setOutbox] = useState<OutboxAction[]>([]),
+    [drafts, setDrafts] = useState<ProofDraft[]>([]),
     [tab, setTab] = useState("journey");
   useEffect(() => {
     let live = true;
     const read = () =>
-      offlineDb.outbox
-        .where("accountId")
-        .equals(account.id)
-        .toArray()
-        .then((v) => {
-          if (live) setOutbox(v);
-        });
+      Promise.all([
+        offlineDb.outbox.where("accountId").equals(account.id).toArray(),
+        offlineDb.proofDrafts.where("accountId").equals(account.id).toArray(),
+      ])
+        .then(([actions, kept]) => {
+          if (live) {
+            setOutbox(actions);
+            setDrafts(kept);
+          }
+        })
+        .catch(() => {});
     void read();
     const timer = setInterval(read, 1500);
     return () => {
@@ -936,6 +946,23 @@ export function Driver({
               <RefreshCw size={16} /> Retry sync
             </Button>
           </div>
+          {drafts.map((draft) => {
+            const currentOrder = orders.find((o) => o.id === draft.orderId);
+            return currentOrder?.status === "DEFERRED" &&
+              draft.expectedVersion !== currentOrder.version &&
+              !outbox.some(
+                (a) =>
+                  a.entityId === draft.orderId && a.syncState !== "rejected",
+              ) ? (
+              <DeferredDraftReview
+                key={draft.key}
+                account={account}
+                order={currentOrder}
+                draft={draft}
+                onSaved={onSaved}
+              />
+            ) : null;
+          })}
           {!outbox.length ? (
             <p>No proof saved on this device yet.</p>
           ) : (
@@ -986,6 +1013,104 @@ export function Driver({
     </>
   );
 }
+function DeferredDraftReview({
+  account,
+  order,
+  draft,
+  onSaved,
+}: {
+  account: Account;
+  order: Order;
+  draft: ProofDraft;
+  onSaved: () => void;
+}) {
+  const [busy, setBusy] = useState(false),
+    [error, setError] = useState(""),
+    [preview, setPreview] = useState("");
+  useEffect(() => {
+    if (!draft.photo) return;
+    const url = URL.createObjectURL(draft.photo);
+    setPreview(url);
+    return () => URL.revokeObjectURL(url);
+  }, [draft.photo]);
+  return (
+    <section
+      aria-label="Retained draft for deferred stop"
+      className="conflict-row"
+    >
+      <h3>{order.source_ref || order.reference} · unsent draft retained</h3>
+      <p>
+        Dispatch deferred this stop. Save the original evidence for dispatcher
+        review; this does not confirm delivery or undo the deferral.
+      </p>
+      <ul>
+        {order.lines.map((line) => (
+          <li key={line.id}>
+            {line.name}:{" "}
+            {draft.quantities[line.id] ?? "Missing retained quantity"} retained
+            · {line.loaded ?? 0} released
+          </li>
+        ))}
+      </ul>
+      <p>
+        Issue: {draft.issue || "None recorded"} · original stop version{" "}
+        {draft.expectedVersion} · current version {order.version}
+      </p>
+      {preview && (
+        <img
+          src={preview}
+          alt="Retained draft evidence preview"
+          className="proof-preview"
+        />
+      )}
+      {!draft.photo && (
+        <p>
+          The draft has no photo. Keep it and ask dispatch to review this stop.
+        </p>
+      )}
+      {error && <p role="alert">{error}</p>}
+      <Button
+        disabled={busy || !draft.photo}
+        onClick={async () => {
+          setBusy(true);
+          setError("");
+          try {
+            if (
+              Object.keys(draft.quantities).length !== order.lines.length ||
+              order.lines.some(
+                (line) => !Number.isInteger(draft.quantities[line.id]),
+              )
+            )
+              throw new Error(
+                "The order lines changed. Evidence is retained; ask dispatch to review before submission.",
+              );
+            // Preserve the captured version so Spring retains a conflict, never a silent rebase.
+            await saveProof(
+              account,
+              { ...order, version: draft.expectedVersion },
+              draft.quantities,
+              draft.issue,
+              new File([draft.photo!], draft.photoName || "proof.png", {
+                type: draft.photo!.type,
+              }),
+              draft,
+            );
+            onSaved();
+            void syncProofs(account.id);
+          } catch (e) {
+            setError((e as Error).message);
+          } finally {
+            setBusy(false);
+          }
+        }}
+      >
+        {busy
+          ? "Saving evidence…"
+          : "Save retained draft for dispatcher review"}
+      </Button>
+    </section>
+  );
+}
 function DeliveryForm({
   account,
   order,
@@ -995,13 +1120,13 @@ function DeliveryForm({
   order: Order;
   onSaved: () => void;
 }) {
-  const [counts, setCounts] = useState(
-      Object.fromEntries(order.lines.map((l) => [l.id, l.loaded || 0])),
-    ),
-    [issue, setIssue] = useState(""),
-    [file, setFile] = useState<File>(),
-    [saving, setSaving] = useState(false),
+  const local = useProofDraft(account.id, order);
+  const counts = local.draft.quantities,
+    issue = local.draft.issue,
+    file = local.draft.photo;
+  const [saving, setSaving] = useState(false),
     [error, setError] = useState("");
+  const [reviewedLoad, setReviewedLoad] = useState(false);
   const [preview, setPreview] = useState("");
   useEffect(() => {
     if (!file) {
@@ -1024,70 +1149,183 @@ function DeliveryForm({
           ? "Proof is saved on this device before upload."
           : "Connection unavailable. Save proof now; sync retries when connectivity returns."}
       </Notice>
-      {order.lines.map((l) => (
-        <Panel className="product-row" key={l.id}>
-          <div className="product-copy">
-            <h3>{l.name}</h3>
-            <p>
-              {l.loaded} released · {l.ordered - (l.loaded || 0)} known not
-              loaded
-            </p>
-          </div>
-          <Counter
-            label={"Delivered " + l.name}
-            value={counts[l.id]}
-            max={l.loaded || 0}
-            onChange={(v) => setCounts({ ...counts, [l.id]: v })}
-          />
-        </Panel>
-      ))}
-      <Panel>
-        <label>
-          Delivery issue
-          <select value={issue} onChange={(e) => setIssue(e.target.value)}>
-            <option value="">No new discrepancy</option>
-            <option>Short at delivery</option>
-            <option>Damaged product</option>
-            <option>Damaged packaging</option>
-          </select>
-        </label>
-        <label className="photo-label">
-          <Camera size={22} /> Delivery photo · JPEG or PNG, up to 5 MB
-          <input
-            aria-label="Delivery photo"
-            type="file"
-            accept="image/jpeg,image/png"
-            capture="environment"
-            onChange={(e) => setFile(e.target.files?.[0])}
-          />
-        </label>
-        {file && (
-          <>
-            <img
-              className="proof-preview"
-              src={preview}
-              alt="Selected delivery evidence preview"
-            />
-            <p>
-              {file.name} · {(file.size / 1024).toFixed(0)} KB selected
-            </p>
-          </>
+      <Notice
+        tone={local.state === "error" || local.stale ? "warning" : "info"}
+      >
+        <span role="status">
+          {local.state === "loading"
+            ? "Opening your local proof draft…"
+            : local.state === "saving"
+              ? "Saving draft on this device…"
+              : local.state === "saved"
+                ? "Draft saved on this device · not submitted"
+                : "Quantity, issue and photo changes are saved as a local draft."}
+        </span>
+        {local.error && <p role="alert">{local.error}</p>}
+        {local.stale && (
+          <p>
+            The stop changed since this draft was recorded. Your draft is
+            retained. Compare the retained quantities below with the current
+            released load. You can keep your photo and issue after reviewing.
+          </p>
         )}
-        <small>
-          Photo and physical quantities are retained together. Store receipt is
-          a separate confirmation.
-        </small>
-      </Panel>
+        {local.stale && (
+          <div className="proof-draft-review">
+            <label>
+              <input
+                type="checkbox"
+                checked={reviewedLoad}
+                onChange={(e) => setReviewedLoad(e.target.checked)}
+              />
+              I reviewed the retained quantities and photo against the current
+              released load
+            </label>
+            <Button
+              variant="outline"
+              disabled={!reviewedLoad || saving || local.state !== "saved"}
+              onClick={() => {
+                try {
+                  local.review();
+                  setReviewedLoad(false);
+                  setError("");
+                } catch (e) {
+                  setError((e as Error).message);
+                }
+              }}
+            >
+              Keep evidence and use reviewed load
+            </Button>
+          </div>
+        )}
+        {(local.state === "saved" ||
+          local.stale ||
+          local.state === "error") && (
+          <Button
+            variant="outline"
+            disabled={saving || local.state === "saving"}
+            onClick={async () => {
+              try {
+                await local.discard();
+                setError("");
+              } catch (e) {
+                setError((e as Error).message);
+              }
+            }}
+          >
+            Discard local draft
+          </Button>
+        )}
+      </Notice>
+      <fieldset
+        disabled={
+          saving ||
+          local.state === "loading" ||
+          local.state === "error" ||
+          local.stale
+        }
+        className="proof-draft-fields"
+      >
+        {order.lines.map((l) => (
+          <Panel className="product-row" key={l.id}>
+            <div className="product-copy">
+              <h3>{l.name}</h3>
+              <p>
+                {l.loaded} released · {l.ordered - (l.loaded || 0)} known not
+                loaded
+              </p>
+            </div>
+            <Counter
+              label={"Delivered " + l.name}
+              value={counts[l.id]}
+              max={l.loaded || 0}
+              onChange={(v) =>
+                local.update({ quantities: { ...counts, [l.id]: v } })
+              }
+            />
+          </Panel>
+        ))}
+        <Panel>
+          <label>
+            Delivery issue
+            <select
+              aria-label="Delivery issue"
+              value={issue}
+              onChange={(e) => local.update({ issue: e.target.value })}
+            >
+              <option value="">No new discrepancy</option>
+              <option>Short at delivery</option>
+              <option>Damaged product</option>
+              <option>Damaged packaging</option>
+            </select>
+          </label>
+          <label className="photo-label">
+            <Camera size={22} /> Delivery photo · JPEG or PNG, up to 5 MB
+            <input
+              aria-label="Delivery photo"
+              type="file"
+              accept="image/jpeg,image/png"
+              capture="environment"
+              onChange={(e) => {
+                const selected = e.target.files?.[0];
+                if (!selected) return;
+                if (
+                  !["image/jpeg", "image/png"].includes(selected.type) ||
+                  selected.size > 5 * 1024 * 1024 ||
+                  !selected.size
+                ) {
+                  setError("Choose a JPEG or PNG photo up to 5 MB.");
+                  e.target.value = "";
+                  return;
+                }
+                setError("");
+                local.update({ photo: selected, photoName: selected.name });
+              }}
+            />
+          </label>
+          {file && (
+            <>
+              <img
+                className="proof-preview"
+                src={preview}
+                alt="Selected delivery evidence preview"
+              />
+              <p>
+                {local.draft.photoName} · {(file.size / 1024).toFixed(0)} KB
+                selected
+              </p>
+            </>
+          )}
+          <small>
+            Photo and physical quantities are retained together. Store receipt
+            is a separate confirmation.
+          </small>
+        </Panel>
+      </fieldset>
       {error && <Notice tone="critical">{error}</Notice>}
       <div className="sticky-action">
         <small>Saved locally before any confirmation</small>
         <Button
-          disabled={saving || !file || (short && !issue)}
+          disabled={
+            saving ||
+            local.state !== "saved" ||
+            local.stale ||
+            !file ||
+            (short && !issue)
+          }
           onClick={async () => {
             setSaving(true);
             setError("");
             try {
-              await saveProof(account, order, counts, issue, file!);
+              await local.flush();
+              await saveProof(
+                account,
+                order,
+                counts,
+                issue,
+                new File([file!], local.draft.photoName || "proof.png", {
+                  type: file!.type,
+                }),
+              );
               onSaved();
               void syncProofs(account.id);
             } catch (e) {

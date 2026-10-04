@@ -96,6 +96,7 @@ public class PlanningService {
     public Map<String,Object> validate(Account a,Plan plan) {
         dispatcher(a);
         var failures=new ArrayList<Map<String,Object>>();
+        fail(failures,plan.reason()!=null&&!plan.reason().isBlank()&&plan.reason().length()<=500,"PUBLICATION_REASON","Enter a publication reason of 1–500 characters.","plan");
         var computed=new ArrayList<Map<String,Object>>();
         var assigned=new HashSet<UUID>();
         var slots=new HashSet<String>();
