@@ -83,6 +83,7 @@ async function proof(p: Page) {
   await p
     .getByRole("button", { name: "Save proof on this device", exact: true })
     .click();
+  await expect(p.getByLabel("Delivery photo", { exact: true })).toHaveCount(0);
   await p.getByRole("button", { name: "Sync", exact: true }).click();
 }
 async function store(p: Page, outlet: string, ref: string) {
@@ -799,6 +800,12 @@ test("public regression fixture retains offline proof and resolves a same-stop c
         exact: true,
       })
       .click();
+    await expect(retainedDraft).toHaveCount(0);
+    await expect(
+      v.getByText(`${order.reference} · Saved on device · pending sync`, {
+        exact: true,
+      }),
+    ).toBeVisible();
     await v.reload();
     await v.getByRole("button", { name: "Sync", exact: true }).click();
     await expect(
