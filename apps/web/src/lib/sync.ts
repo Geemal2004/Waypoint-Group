@@ -30,7 +30,18 @@ export async function cachedRead<T>(
     throw new Error("The active account changed. Reopen this workspace.");
   const key = accountId + ":" + path;
   if (navigator.onLine) {
-    const value = await api<T>(path);
+    let value: T;
+    try {
+      value = await api<T>(path);
+    } catch (error) {
+      // Wi-Fi can stay connected while the service is unreachable. Only
+      // transport failures may use saved data; server errors remain visible.
+      if (error instanceof ApiError && error.status < 500) throw error;
+      if (activeAccountId() !== accountId) throw error;
+      const saved = await offlineDb.cache.get(key);
+      if (!saved) throw error;
+      return saved.value as T;
+    }
     if (activeAccountId() !== accountId)
       throw new Error(
         "The active account changed before this response arrived.",

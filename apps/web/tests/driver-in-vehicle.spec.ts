@@ -305,6 +305,54 @@ const png = {
   ),
 };
 
+test("driver reopens saved proof when the service is unreachable but Wi-Fi stays online", async ({
+  page,
+}) => {
+  await openDriver(page, [order("A", 1, "ARRIVED")]);
+  await page
+    .getByRole("button", { name: "All delivered as loaded", exact: true })
+    .click();
+  await page.getByLabel("Delivery photo", { exact: true }).setInputFiles(png);
+  await expect(
+    page.getByText("Draft saved on this device", { exact: false }),
+  ).toBeVisible();
+  await page.route("**/api/v1/**", (route) =>
+    route.abort("internetdisconnected"),
+  );
+  await page.reload();
+  expect(await page.evaluate(() => navigator.onLine)).toBe(true);
+  await expect(page.locator(".driver-workspace")).toBeVisible();
+  await expect(page.locator(".driver-sync-banner")).toContainText("Offline");
+  await expect(page.locator(".driver-sync-banner")).not.toContainText("Online");
+  await expect(
+    page.getByText("Service connection unavailable.", { exact: false }),
+  ).toBeVisible();
+  await expect(
+    page.getByAltText("Selected delivery evidence preview"),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Save proof on this device", exact: true })
+    .click();
+  await expect(page.locator(".driver-saved-confirmation")).toContainText(
+    "Keells Super Nugegoda A",
+  );
+  await expect(page.locator(".driver-sync-banner")).toContainText(
+    "1 stop to send",
+  );
+  await page.unroute("**/api/v1/**");
+  await page.route("**/api/v1/**", (route) =>
+    route.fulfill({ status: 503, json: { message: "Service unavailable" } }),
+  );
+  await page.reload();
+  await expect(page.locator(".driver-workspace")).toBeVisible();
+  await expect(page.locator(".driver-sync-banner")).toContainText("Offline");
+  await expect(page.locator(".driver-sync-banner")).toContainText(
+    "1 stop to send",
+  );
+  await openDriver(page, [order("A", 1, "ARRIVED")]);
+  await expect(page.locator(".driver-sync-banner")).toContainText("Online");
+});
+
 test("an unchanged delivery is recorded in three taps after arrival", async ({
   page,
 }) => {

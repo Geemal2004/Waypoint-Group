@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { api, ApiError, refreshCsrf } from "./lib/api";
 import { useLiveUpdates } from "./lib/live";
+import { useServiceOnline } from "./lib/connectivity";
 import {
   cachedAccount,
   cachedRead,
@@ -38,7 +39,6 @@ import {
 export function App() {
   const [account, setAccount] = useState<Account | null>(null),
     [starting, setStarting] = useState(true),
-    [online, setOnline] = useState(navigator.onLine),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
     [screen, setScreen] = useState("planning"),
@@ -50,6 +50,7 @@ export function App() {
       localStorage.getItem("waypoint-theme") === "night",
     );
   const client = useQueryClient();
+  const online = useServiceOnline();
   const liveState = useLiveUpdates(account);
   useEffect(() => {
     const changed = () =>
@@ -68,9 +69,6 @@ export function App() {
     localStorage.setItem("waypoint-theme", night ? "night" : "day");
   }, [night]);
   useEffect(() => {
-    const changed = () => setOnline(navigator.onLine);
-    window.addEventListener("online", changed);
-    window.addEventListener("offline", changed);
     let live = true;
     const recover = async () => {
       try {
@@ -83,10 +81,17 @@ export function App() {
         }
       } catch (e) {
         if (e instanceof ApiError && e.status === 401) forgetAccount();
-        else if (live)
-          setError(
-            "Unable to reach the service. Your saved proof remains on this device.",
-          );
+        else if (live) {
+          const saved =
+            e instanceof ApiError && e.status < 500
+              ? null
+              : await cachedAccount();
+          if (live && saved) setAccount(saved);
+          else if (live)
+            setError(
+              "Unable to reach the service. Your saved proof remains on this device.",
+            );
+        }
       } finally {
         if (live) setStarting(false);
       }
@@ -94,8 +99,6 @@ export function App() {
     void recover();
     return () => {
       live = false;
-      window.removeEventListener("online", changed);
-      window.removeEventListener("offline", changed);
     };
   }, []);
   useEffect(() => {
@@ -147,7 +150,7 @@ export function App() {
     queryKey: [account?.id, "/orders"],
     queryFn: () => cachedRead<Order[]>(account!.id, "/orders"),
     enabled: !!account,
-    refetchInterval: online ? 5000 : false,
+    refetchInterval: navigator.onLine ? 5000 : false,
     refetchIntervalInBackground: true,
     networkMode: "always",
   });
@@ -167,7 +170,7 @@ export function App() {
     queryKey: [account?.id, "/sync-conflicts"],
     queryFn: () => cachedRead<Conflict[]>(account!.id, "/sync-conflicts"),
     enabled: account?.role === "DISPATCHER",
-    refetchInterval: online ? 5000 : false,
+    refetchInterval: navigator.onLine ? 5000 : false,
     refetchIntervalInBackground: true,
     networkMode: "always",
   });

@@ -1,40 +1,136 @@
 # Waypoint Group
 
-Waypoint connects four authenticated roles to PostgreSQL operations, with dataset-backed multi-stop planning, local OSRM road routes, Spring validation, versioned publication, approved shortages, driver proof and distinct store receipts. Python proposes whole-order allocations; Spring checks every constraint again before publishing. Driver proof survives offline reload and same-stop conflict review. ML remains deferred to the Datathon. See [capability status](docs/product-capabilities.md) and [implementation status](docs/implementation-status.md).
+**Retail distribution operations, from order planning to confirmed store receipt.**
 
-## Start locally
+[![Checks](https://github.com/Geemal2004/Waypoint-Group/actions/workflows/ci.yml/badge.svg)](https://github.com/Geemal2004/Waypoint-Group/actions/workflows/ci.yml)
+![React 19](https://img.shields.io/badge/React-19-149eca)
+![Java 21](https://img.shields.io/badge/Java-21-ed8b00)
+![Python 3.12](https://img.shields.io/badge/Python-3.12-3776ab)
+![PostgreSQL 16](https://img.shields.io/badge/PostgreSQL-16-4169e1)
 
-Install Docker Desktop with Compose v2, then from the repository root:
+[Competition demo](https://18-138-29-235.sslip.io) · [Architecture](docs/architecture.md) · [Capabilities](docs/product-capabilities.md) · [Verification](docs/verification.md)
+
+Waypoint connects store managers, dispatchers, loaders, and drivers in one authenticated workflow for Fresh, Style, and Tech deliveries. It supports road-based multi-stop planning, versioned publication, approved loading shortages, offline delivery evidence, and separate store receipt confirmation.
+
+Spring owns and validates every operational write. Python proposes deterministic whole-order allocations; Spring checks them again against current road routes and business constraints before publication.
+
+## Contents
+
+- [Role workspaces](#role-workspaces)
+- [System architecture](#system-architecture)
+- [Quick start](#quick-start)
+- [Repository structure](#repository-structure)
+- [Offline delivery and recovery](#offline-delivery-and-recovery)
+- [Private data and road routing](#private-data-and-road-routing)
+- [Development and testing](#development-and-testing)
+- [Deployment](#deployment)
+- [Documentation](#documentation)
+- [Current boundaries](#current-boundaries)
+
+## Role workspaces
+
+| Role | Responsibilities |
+| --- | --- |
+| **Store manager** | Create and resume orders, submit demand, track deliveries, and confirm actual received quantities. |
+| **Dispatcher** | Confirm demand, propose or edit plans, validate and publish revisions, approve shortages, and review proof conflicts. |
+| **Loader** | Follow reverse delivery order, count physical quantities, record shortages, and release every stop before departure. |
+| **Driver** | Acknowledge the released trip, follow ordered stops, confirm arrival while parked, capture proof, and monitor sync. |
+
+Account and depot scopes are enforced on the server. Administration additionally requires an explicit permission. Select the same **Operating day** across roles when demonstrating a shared trip. Location sharing requires explicit consent and browser permission.
+
+## System architecture
+
+![Waypoint architecture: role interfaces, browser storage, edge, core and planning services, databases, and routing](docs/assets/system-architecture.png)
+
+| Layer | Technology | Purpose |
+| --- | --- | --- |
+| Browser / PWA | React 19, TypeScript, Vite, Tailwind, TanStack Query, MapLibre GL | Role workspaces, maps, planning, and live operations |
+| Local storage | Dexie / IndexedDB, Workbox | Account-scoped cache, proof drafts and outbox; application asset caching |
+| Core API | Spring Boot 3.5, Java 21 | Identity, authorization, workflow, validation, publication, audit, and reconciliation |
+| Planning API | FastAPI, Python 3.12 | Deterministic whole-order insertion; returns proposals to Core |
+| Persistent data | PostgreSQL 16 + PostGIS, Flyway | Orders, plans, trips, evidence, identities, and audit history |
+| Transient positions | Redis 7.4 | Latest driver positions with a 15-minute expiry |
+| Road routing | OSRM 5.27, prepared Sri Lanka OSM graph | Road durations, distances, matrices, and route geometry |
+| Edge / hosting | nginx, Caddy 2, Docker Compose, AWS Lightsail | Same-origin API proxy, unbuffered SSE, and HTTPS hosting |
+
+Session cookies and CSRF protect authenticated requests. Scoped server-sent events refresh operational queries. Expected versions and database locks protect concurrent edits; immutable action UUIDs and payload digests make proof retries idempotent. Workbox **never caches authenticated API responses**.
+
+See [architecture details](docs/architecture.md) and [the data model](docs/data-model.md). Dashed elements in the diagram represent pending ML work.
+
+## Quick start
+
+Install **Docker Desktop with Compose v2**, then run from the repository root:
 
 ```powershell
 Copy-Item .env.example .env
-docker compose up
+docker compose up --build
 ```
 
-Compose builds and starts the complete default application stack: PostgreSQL/PostGIS, Redis, planning API, Spring core and web UI. Flyway applies migrations; with `DEMO_SEED=true`, startup creates the four demo accounts and six repeatable scenario orders. Open **http://localhost:8080**. PostgreSQL data persists across restarts. Core readiness: http://localhost:8081/actuator/health/readiness. Planning health/docs: http://localhost:8000/health and http://localhost:8000/docs. Use `Ctrl+C` to stop the foreground stack; `docker compose down` removes containers but preserves the database volume.
+| Endpoint | Address |
+| --- | --- |
+| Application | [localhost:8080](http://localhost:8080) |
+| Core readiness | [localhost:8081/actuator/health/readiness](http://localhost:8081/actuator/health/readiness) |
+| Planning health | [localhost:8000/health](http://localhost:8000/health) |
+| Planning API docs | [localhost:8000/docs](http://localhost:8000/docs) |
 
-Compose reads `.env` from the repository root; `.env.example` lists all supported local settings. The defaults are for local development only. `POSTGRES_DB`, `POSTGRES_USER` and `POSTGRES_PASSWORD` configure the database; `WEB_PORT`, `CORE_PORT` and `PLANNING_PORT` change loopback ports; `FRESH_ONLY_REEFERS` and `TURNAROUND_MINUTES` set planning policy; `DEMO_SEED` enables judge accounts/fixtures; `SESSION_SECURE` must stay `false` for local HTTP and be `true` behind HTTPS. The prepared OSRM road graph is private and runs only with the `routing` profile; local road-based allocation requires the private routing setup below. Without it, route-dependent planning reports routing unavailable rather than estimating straight-line routes.
+The default stack starts PostgreSQL/PostGIS, Redis, Planning, Core, and Web. Flyway applies migrations. With `DEMO_SEED=true`, startup creates four synthetic judge accounts and six scenario orders. Database data persists in a Docker volume. Stop with `Ctrl+C`; `docker compose down` removes containers while preserving that volume.
 
-| Role | Username | Password |
+### Local demo accounts
+
+| Role | Username | Local password |
 | --- | --- | --- |
-| Store manager | manager | WaypointDemo!2026 |
-| Dispatcher | dispatcher | WaypointDemo!2026 |
-| Loader | loader | WaypointDemo!2026 |
-| Driver | driver | WaypointDemo!2026 |
+| Store manager | `manager` | `WaypointDemo!2026` |
+| Dispatcher | `dispatcher` | `WaypointDemo!2026` |
+| Loader | `loader` | `WaypointDemo!2026` |
+| Driver | `driver` | `WaypointDemo!2026` |
 
-These are synthetic judge accounts at Peliyagoda, with server-enforced scopes and BCrypt passwords. Default bindings are local only. The competition deployment is **https://18-138-29-235.sslip.io**; its four usernames are the same, with a private competition password in ignored `data/private/lightsail-credentials.json`. The passwords above apply only to local development.
+Demo seeding also enables a one-click role picker for seeded judge accounts. Production disables it with `DEMO_SEED=false`. Competition credentials are managed privately; these passwords apply only to local development.
 
-When `DEMO_SEED=true`, the sign-in page opens with a one-click role picker (Store manager for Waypoint Fresh, Style and Tech; Dispatcher; Loader; Driver) that signs judges into these demo accounts without a password. It is served by `POST /api/v1/auth/demo-login`, which only exists when demo seeding is on and only reaches `DEMO-*` accounts, so production (`DEMO_SEED=false`) shows the plain username and password form.
+### Configuration
 
-## Local video demo for all four personas
+[`.env.example`](.env.example) lists database credentials, loopback ports, demo seeding, session security, and planning policies. Keep `SESSION_SECURE=false` for local HTTP; HTTPS deployments require secure cookies.
 
-Use the regular local Compose app at **http://localhost:8080** video stack and select **2026-10-12**. Its campaign contains 37 orders, six drafts, five active road-backed trips and nine completed historical receipts across Fresh, Style and Tech. Existing orders and trips remain intact alongside the supplemental campaign.
+**Road-based planning requires a separately prepared OSRM graph.** Without it, proposals report routing unavailable. The default stack does not prepare private inputs or road routing.
 
-See [video seed instructions](seed/README.md) for startup, targeted reset, offline rehearsal, backup and verification. Run `node tools/prepare-video-browsers.mjs --open` to prepare four independent recording profiles. The actual WP references and private screenshots are generated under ignored `data/private/video-demo-local`; the [complete plan](docs/demo-seed-plan.md) describes the scenes.
+## Repository structure
 
-## Private challenge reference
+```text
+Waypoint-Group/
+├── apps/web/                  # React PWA and Playwright tests
+│   ├── src/components/        # Store, planning, operations, maps, administration
+│   ├── src/lib/               # API, connectivity, storage, proof sync, GPS
+│   └── tests/                 # Delivery, driver, responsive browser coverage
+├── services/
+│   ├── core/                 # Spring Boot API, Flyway migrations, Java tests
+│   └── planning/             # FastAPI allocation service and Python tests
+├── deploy/                   # HTTPS and Lightsail configuration
+├── docs/                     # Architecture, policies, verification, demo guides
+│   └── assets/               # Documentation images
+├── seed/                     # Four-persona campaign fixtures and instructions
+├── tools/                    # Imports, routing, walkthroughs, backups
+├── data/                     # Local/private inputs and prepared routing data
+├── .github/workflows/ci.yml   # Checks and competition deployment
+├── compose.yaml              # Local stack; optional routing profile
+├── compose.production.yaml   # Production overlay
+├── compose.lightsail.yaml    # Competition hosting overlay
+└── compose.video.yaml        # Isolated video demo overlay
+```
 
-The dataset judge walkthrough requires the supplied private files. Competition files, derived order rows, waypoint mappings and generated SQL stay gitignored. From the repository root, with Docker Desktop running:
+Private datasets, credentials, derived imports, browser profiles, and generated evidence stay outside version control. Temporary browser reports are written under ignored `tmp/`.
+
+## Offline delivery and recovery
+
+At an **arrived stop**, the driver can retain quantities, an issue reason, and a JPEG/PNG locally, then explicitly save proof to an immutable outbox. The photo and action are stored atomically before upload. Evidence survives offline reloads and remains account scoped.
+
+The driver indicator reflects API reachability. Connection failures, request timeouts, and server errors switch it to **Offline**, even when Wi-Fi remains connected. Saved assignments remain available and proof capture continues; online departure and arrival handoffs stay disabled. Successful service responses restore the online state.
+
+Sync retries on reconnection, app opening, a foreground timer, and manual retry, with backoff capped at 60 seconds. If a stop changed before upload, the server retains the evidence for dispatcher review. Local save, server acceptance, and store receipt are distinct states.
+
+Browser storage is not a backup, and background tracking is not guaranteed. See [architecture](docs/architecture.md) and [verification](docs/verification.md) for recovery details.
+
+## Private data and road routing
+
+The source-data walkthrough requires supplied private challenge files and a prepared OSRM graph:
 
 ```powershell
 ./tools/prepare-data.ps1 -SourceDirectory 'C:\private\challenge\data'
@@ -44,74 +140,90 @@ docker compose --profile routing up -d osrm
 docker compose --profile routing up --build -d --wait
 ```
 
-Preparation imports the seven General Data files and all 85 Task 2B S1 orders with their source IDs, aggregate units/kg/m³, windows and previous-day history; 38 scenario vehicle statuses are retained. The source has no outlet coordinates, SKU breakdown or refrigerated setpoints. The user authorised **labelled supplemental judge road waypoints and cold capabilities**: town road points are snapped by local OSRM, and chilled requirements/capabilities are declared 2–5°C. These do not claim actual outlet locations or certified fleet ranges. Each source order is one aggregate source-unit line, not an invented SKU catalogue. Source driver accounts remain disabled; the existing judge driver login represents the provisioned source fleet for role demonstrations.
+The import retains the seven General Data files and 85 Task 2B S1 orders with source identifiers. The files do not provide outlet coordinates, SKU breakdowns, or certified cold ranges. Labelled supplemental road waypoints and cold capabilities support the judge demonstration; aggregate source demand is not an invented SKU catalogue.
 
-S1 is undated. Its consistent planning simulation date is **8 January 2026**, a supplied operating day; deferrals use 9 January. All trips use Asia/Colombo. Proof capture and audit timestamps report the actual demonstration time separately. The dated Sri Lanka OSM extract and OSRM image digest/checksums are recorded privately in `data/osrm/provenance.json`. This is a replay scenario, not a live historical traffic reconstruction. See [dataset audit](docs/dataset-audit.md) and [policies](docs/constraints-and-policies.md).
+The undated S1 scenario uses **8 January 2026** as its replay planning date. Trip schedules use **Asia/Colombo**; capture and audit timestamps remain the actual demonstration time.
 
-## Judge walkthrough
+OSRM failure blocks road-dependent proposals and publication. There is no straight-line fallback. See [dataset audit](docs/dataset-audit.md), [constraints and policies](docs/constraints-and-policies.md), and [API walkthrough](docs/api-walkthrough.md).
 
-1. Dispatcher: open **Planning**, day `2026-01-08`, and choose **Propose judge scenario** on fresh/reset state. This selects the multi-stop Fresh dry, separate chilled, mall and excess-demand cases. The queue shows source orders, kg/m³, unloading/windows and skip history. You can also select other compatible orders or propose all demand. Review actual road timing, both capacity bars, fuel litres, violations and deferred reasons before publishing.
-2. For a focused reproducible scenario, `node tools/dataset-walkthrough.mjs` publishes two feasible multi-stop trips plus a separate chilled trip, including the same Fresh outlet's dry/chilled orders, van-only access, a fixed mall window and a genuine excess-volume deferral. It also checks competing/stale publication and completes the dry trip through all four roles, with shortage and retained-proof recovery. Run after the explicit judge reset; it deliberately rejects already-used scenario state.
-3. Loader: select a source assignment. Follow the displayed reverse loading sequence; count every stop, record a shortage if necessary, obtain dispatcher approval and release every stop. Driver departure is held until the complete trip is released.
-4. Driver: acknowledge the trip once, then follow the published stop sequence. Arrive, capture a JPEG/PNG and save proof. Store manager confirms actual received quantities separately. A known approved shortage remains part of that order.
-5. Offline branch: at an arrived source stop, reload once online, disconnect/reload, then capture proof. A dispatcher deferral of that same stop creates a retained conflict on reconnect; authorised review recovers delivery without erasing the deferral. Existing proof action UUIDs and per-order versions remain stable across the trip.
-6. Manual adjustments use the same server validator. Untouched published manifests can be reordered or retimed with a new plan version; a manifest is locked as soon as loading begins. Moving whole orders between proposed trips invalidates prior validation until checked again.
+For the supplemental recording campaign, select **12 October 2026** and follow [the video seed guide](seed/README.md), [scene plan](docs/demo-seed-plan.md), and [recording script](docs/demo-video-script.md). Reset procedures belong to disposable demo environments; the guides document their scope.
 
-OSRM failure blocks proposals and publication with `ROUTING_UNAVAILABLE`; unreachable roads return `ROUTING_UNREACHABLE`. Repair the mapping/service and retry. There is no straight-line fallback. OSRM uses its car road profile, without live traffic, truck height/weight restrictions or certified cold-chain telemetry.
+## Development and testing
 
-## Product workflow
+Use **Node.js 22**, **Java 21 with Maven**, and **Python 3.12**. Docker is required for integration tests and the full stack.
 
-Use separate profiles for all four accounts. Select the same **Operating day** in every role; active work uses that date, while History retains earlier records.
-
-1. Store: select an authorized outlet and open New order. Count selectable catalogue units in separate Dry/Chilled/Frozen orders, save/resume a draft, then review and submit. Fresh, Style and Tech have distinct surfaces and receiving guidance. Judge SKUs are explicitly supplemental; source files supply aggregate demand rather than retail SKU details or prices.
-2. Dispatcher: review submissions in Orders and confirm quantities. Planning offers confirmed orders for assisted or manual multi-stop allocation. Review both capacities, access, road timing, windows, fuel and failures before publication. The source judge scenario uses the January replay; new catalogue orders use reviewed October dates.
-3. Loader: select the assigned load for that day, follow reverse delivery order, count physical units and record shortages. Dispatch approves partial release through Orders. Release every stop before departure.
-4. Driver: Journey shows ordered checkpoints, actual road geometry and released quantities. Start the trip once, follow stop order, arrive while safely stopped, then count/preview/save a JPEG/PNG in Stop proof. Sync distinguishes local save, acceptance, rejection and conflict. Evidence survives offline reload and remains account scoped after sign-out.
-5. Store: track the delivery and confirm received quantities separately. Approved shortages remain visible. Tech receiving issues persist; receipt-specific damage attachments and signatures remain pending.
-6. Store amendments before loading independently recalculate the whole published trip and publish a new revision only if feasible. Cancellation is available before allocation. Dispatch records whole-order deferral and explicitly creates one linked replacement on a later reviewed date. Original demand, evidence and consecutive skip history remain intact.
-7. Location sharing requires permission and explicit Start/Stop. Capture/receipt times, accuracy, denied permission, poor accuracy, stale and offline states are visible. A foreground queue keeps only the latest position for up to 15 minutes; background tracking is not promised. The separately labelled judge simulator never claims physical GPS or confirms arrival.
-8. Dispatcher Live network/Fleet includes both depots, 120 source outlets and 60 vehicles. Maps cluster configured coordinates and show vehicles only with accepted reports. Current-day arrival estimates require fresh accurate location and OSRM; replay times remain planned. Durable scoped issues arrive through server updates. Phone links appear only for authorized provisioned numbers.
-9. Administration requires an explicit permission. Catalogue, outlets, fleet/drivers/accounts, windows, cold capabilities, waypoints and dates use reviewed reasons, provenance, revision checks and audit. Active assignments protect constraints. JSON imports preview every row and apply atomically after validation. Raw source records are preserved.
-
-Legacy one-stop reservation APIs remain limited to isolated DEMO regression fixtures and are absent from product planning. ML remains deferred; Kafka is absent.
-
-## Explicit demo reset
-
-This deletes **DEMO and imported S1 judge order history/evidence and their plans** from the selected Compose project; it retains accounts, source network, raw source records, waypoint mappings and unrelated operational orders. Stop active role actions first. Never use it on an operational database.
+### Frontend
 
 ```powershell
-Get-Content tools/reset-demo.sql -Raw | docker compose exec -T db sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"'
-docker compose restart core
+cd apps/web
+npm ci
+npm run dev
 ```
 
-Restart restores the six legacy fixtures and 85 S1 orders when the private planning import is present. Browser evidence remains account scoped; use fresh profiles after a server reset to avoid replaying old actions.
+Vite proxies `/api` to Core on port `8081`. Run checks and browser tests:
 
-## Development and checks
+```powershell
+npm run typecheck
+npm run build
+npx playwright install chromium
+npm run test:e2e
+```
 
-The [development priorities](docs/development-priorities.md) track ongoing improvements. Driver proof drafts retain quantities, issue and photo locally before submission; validated plans show a publication review for all handoffs.
+Browser tests expect a running app at `http://localhost:8080`; set `WAYPOINT_URL` for another endpoint. Source scenarios require prepared private inputs and fresh demo state. Standalone driver UI tests mock API responses and use the production PWA shell.
 
-If a stop changes, review the retained draft against the current released load to keep its photo. If dispatch deferred the stop, open Sync and save the retained draft for dispatcher review; the original version, quantities and photo are preserved in the conflict workflow. Publication requires a nonblank reason of at most 500 characters.
+### Core
 
-[GitHub Actions CI/CD](docs/ci-cd.md) checks pushes and pull requests and deploys successful `main` revisions to the competition Lightsail environment. Deployment requires the environment SSH secrets; private datasets stay on the server.
+From `services/core`:
 
-React/TypeScript/Vite, Tailwind, shadcn-style Button/CVA, TanStack Query, Workbox and Dexie; Spring Boot/Java 21; FastAPI assisted insertion; PostgreSQL/PostGIS, Redis and OSRM. ML dependencies remain deferred with ML integration; Kafka is absent.
+```powershell
+mvn verify -Pintegration
+```
 
-Frontend: `cd apps/web; npm ci; npm run dev` proxies `/api` to port 8081. Backend: Java 21/Maven, `cd services/core; mvn verify -Pintegration` uses disposable Testcontainers PostgreSQL (Docker required). Planning: Python 3.12, install requirements then `python -m pytest`.
+Integration tests use disposable Testcontainers PostgreSQL.
 
-With the stack running, `node tools/online-walkthrough.mjs` verifies HTTP security/handoffs/replay/recovery using legacy fixtures. `cd apps/web; npx playwright install chromium; npm run test:e2e` exercises source multi-stop planning, four-role UI, phone layouts and offline reload, plus lifecycle/rescheduling and receipt/account-isolation regression coverage. The source browser scenario requires fresh/reset S1 state and explicitly skips if private inputs are absent; the legacy scenarios create synthetic regression orders. Use `WAYPOINT_URL` for a different local endpoint. After the dataset API walkthrough on an isolated judge project, `node tools/location-walkthrough.mjs` exercises explicitly emulated browser permission/accuracy/offline location behavior and phone proof layout; it loads/starts the untouched Tech trip. See [verification](docs/verification.md) for actual results, [architecture](docs/architecture.md), [schema](docs/data-model.md), and [API walkthrough](docs/api-walkthrough.md).
+### Planning
 
-## Deployment and recovery
+From `services/planning`, in a Python virtual environment:
 
-See [deployment instructions](docs/deployment.md) for isolated HTTPS configuration, administrator provisioning, backup and disposable restore. Production disables judge seeding/simulation and requires private credentials, reviewed imports and certificates. Production acceptance remains pending.
+```powershell
+python -m pip install -r requirements.txt
+python -m pytest
+```
 
-The Lightsail competition server uses [its own deployment configuration](docs/aws-deployment.md), keeping labelled judge inputs and persistent cloud data. Continue development locally, commit a reviewed change, then run `./tools/deploy-lightsail.ps1 -Revision HEAD`. The update takes a database backup and preserves cloud accounts, plans, proof and certificate volumes. Private data and SSH keys stay outside Git; future source releases reuse the approved server imports.
+With the stack running, execute `node tools/online-walkthrough.mjs` from the repository root for authenticated API handoffs and replay recovery. Dataset and location walkthroughs require their documented fixtures.
 
-## Design and submission
+[GitHub Actions](https://github.com/Geemal2004/Waypoint-Group/actions) checks frontend builds, Java tests, Python tests, API handoffs, and browser scenarios. See [CI/CD](docs/ci-cd.md) and [verification evidence](docs/verification.md) for scope and recorded results.
 
-[Figma reference](https://www.figma.com/design/gWapWGfw3V1dhKLlMKSwxG/Waypoint_Designathon--Copy-?node-id=2303-146). Role screens/tokens/rationales were inspected through the connected Figma account. The interface uses the submitted DM Sans typography, brand identity, day/night tokens and product/quantity handoffs, with a phone loader adaptation. Significant scope and fidelity departures are recorded in [design departures](docs/design-departures.md).
+## Deployment
 
-Allocation uses deterministic feasible insertion without claiming optimality. Explicit linked rescheduling works; automatic rolling rescheduling and ranked mall recovery remain pending. Published membership/vehicle reassignment remains restricted. Physical GPS/camera/background behavior, certified geography/cold ranges and traffic/truck routing require deployment validation. OSRM requires the prepared extract; enabling its profile alone does not prepare it.
+The competition environment uses Docker Compose on **AWS Lightsail**, with Caddy HTTPS, persistent database/certificate volumes, and prepared host-side routing data. Successful checks on `main` trigger competition deployment when the required environment secrets are configured.
 
-Competition HTTPS hosting is deployed. Team naming, repository URL confirmation and the human-recorded unlisted 5–8 minute video remain submission actions. Keep the existing repository name until TeamName is supplied. See [submission guide](docs/submission-guide.md).
+- [AWS deployment and recovery](docs/aws-deployment.md): competition configuration, release updates, and recovery.
+- [Production deployment](docs/deployment.md): secure sessions, disabled demo features, administrator provisioning, backups, and restore.
+- [CI/CD](docs/ci-cd.md): workflow jobs, deployment environment, and required secrets.
 
-Submission references: [architecture diagram](docs/architecture.md#architecture), [deployment diagram and AWS recovery](docs/aws-deployment.md#deployment-architecture), [data model](docs/data-model.md), [AI tool disclosure](docs/ai-disclosure.md), [Designathon departures](docs/design-departures.md), and [verification/test results](docs/verification.md).
+Private datasets and SSH keys remain outside Git. Production acceptance and physical-device validation are separate from competition hosting.
+
+## Documentation
+
+| Guide | Coverage |
+| --- | --- |
+| [Product capabilities](docs/product-capabilities.md) | Implemented workflows and pending features |
+| [Architecture](docs/architecture.md) / [Data model](docs/data-model.md) | Services, trust boundaries, storage, concurrency |
+| [Constraints and policies](docs/constraints-and-policies.md) | Capacity, access, timing, cold requirements, publication |
+| [Dataset audit](docs/dataset-audit.md) | Source provenance and supplemental assumptions |
+| [API walkthrough](docs/api-walkthrough.md) / [Verification](docs/verification.md) | Reproducible checks and acceptance evidence |
+| [Development priorities](docs/development-priorities.md) | Remaining engineering work |
+| [Design departures](docs/design-departures.md) / [Figma coverage](docs/figma-screen-coverage.md) | Design fidelity and implementation rationale |
+| [AI disclosure](docs/ai-disclosure.md) / [Submission guide](docs/submission-guide.md) | Tool use and competition submission |
+
+[Design reference in Figma](https://www.figma.com/design/gWapWGfw3V1dhKLlMKSwxG/Waypoint_Designathon--Copy-?node-id=2303-146).
+
+## Current boundaries
+
+- Allocation uses deterministic feasible insertion and does not claim optimality. LightGBM integration remains deferred to the Datathon; Kafka is absent.
+- Explicit linked rescheduling is supported. Automatic rolling rescheduling, ranked mall recovery, and published membership/vehicle reassignment remain restricted or pending.
+- OSRM uses its car profile without live traffic or certified truck restrictions. Supplemental waypoints and cold ranges are labelled demo assumptions.
+- Physical GPS, camera behavior, background execution, and production acceptance require deployment validation. Receipt-specific damage attachments and signatures remain pending.
+
+See [product capabilities](docs/product-capabilities.md) and [verification](docs/verification.md) for detailed status.

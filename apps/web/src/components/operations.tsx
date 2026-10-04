@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { Button } from "./ui/button";
 import { api } from "../lib/api";
+import { useServiceOnline } from "../lib/connectivity";
 import type { Account, Catalog, Order, Vehicle, Conflict } from "../lib/models";
 import {
   offlineDb,
@@ -748,16 +749,7 @@ export function Driver({
   const [selectedTrip, setSelectedTrip] = useState("");
   const [savedStop, setSavedStop] = useState<Order | null>(null);
   const [arriving, setArriving] = useState(false);
-  const [online, setOnline] = useState(navigator.onLine);
-  useEffect(() => {
-    const changed = () => setOnline(navigator.onLine);
-    window.addEventListener("online", changed);
-    window.addEventListener("offline", changed);
-    return () => {
-      window.removeEventListener("online", changed);
-      window.removeEventListener("offline", changed);
-    };
-  }, []);
+  const online = useServiceOnline();
   useEffect(() => {
     setSelected("");
     setSelectedTrip("");
@@ -1036,6 +1028,13 @@ export function Driver({
           </span>
         )}
       </div>
+      {!online && (
+        <Notice tone="warning">
+          Service connection unavailable. Showing saved stops. Save delivery
+          proof on this device; uploads retry automatically when the service
+          returns.
+        </Notice>
+      )}
       {savedStop && tab !== "sync" && tab !== "history" && (
         <Panel className="driver-saved-confirmation">
           <h2>
@@ -1525,6 +1524,7 @@ function DeliveryForm({
   onSaved: () => void;
 }) {
   const local = useProofDraft(account.id, order);
+  const online = useServiceOnline();
   const counts = local.draft.quantities,
     issue = local.draft.issue,
     file = local.draft.photo;
@@ -1583,7 +1583,7 @@ function DeliveryForm({
         tone={local.state === "error" || local.stale ? "warning" : "info"}
       >
         <small>
-          {navigator.onLine
+          {online
             ? "Proof is saved on this device before upload."
             : "Connection unavailable. Save proof now; sync retries when connectivity returns."}
         </small>

@@ -1,3 +1,5 @@
+import { serviceFetch } from "./connectivity";
+
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -9,7 +11,7 @@ export class ApiError extends Error {
 }
 let csrf: { token: string; headerName: string } | undefined;
 export async function refreshCsrf() {
-  const response = await fetch("/api/v1/auth/csrf", {
+  const response = await serviceFetch("/api/v1/auth/csrf", {
     credentials: "same-origin",
   });
   if (!response.ok) throw new Error("Cannot establish a secure session.");
@@ -28,7 +30,7 @@ export async function api<T>(path: string, body?: unknown): Promise<T> {
           : "application/json",
       );
   }
-  const response = await fetch("/api/v1" + path, {
+  const response = await serviceFetch("/api/v1" + path, {
     credentials: "same-origin",
     method: body === undefined ? "GET" : "POST",
     headers,
