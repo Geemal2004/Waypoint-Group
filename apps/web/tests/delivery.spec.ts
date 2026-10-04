@@ -324,7 +324,10 @@ test("reviewed store drafts produce a versioned multi-stop road journey with liv
       ["OUT002", 4],
     ] as const) {
       await m.getByLabel("Outlet", { exact: true }).selectOption(outlet);
-      await m.getByRole("button", { name: "New order", exact: true }).click();
+      await m
+        .getByRole("navigation", { name: "Store tasks" })
+        .getByRole("button", { name: "New order", exact: true })
+        .click();
       await m.getByLabel("Requested operating day").selectOption(day);
       await m
         .getByLabel("Rice cartons quantity", { exact: true })
@@ -1166,7 +1169,10 @@ test("Style schedule, protected Tech receipt, night mode and cross-tab account i
   const [m, d, l, v] = pages;
   try {
     await m.getByLabel("Outlet", { exact: true }).selectOption("DEMO-STYLE");
-    await m.getByRole("button", { name: "New order", exact: true }).click();
+    await m
+      .getByRole("navigation", { name: "Store tasks" })
+      .getByRole("button", { name: "New order", exact: true })
+      .click();
     await m.getByLabel("Requested operating day").selectOption("2026-10-07");
     await m
       .getByLabel("Hanging garment cartons quantity", { exact: true })
@@ -1250,7 +1256,9 @@ test("Style schedule, protected Tech receipt, night mode and cross-tab account i
       .fill(process.env.JUDGE_PASSWORD || "WaypointDemo!2026");
     await v.getByRole("button", { name: "Sign in", exact: true }).click();
     await expect(
-      peer.getByRole("button", { name: "New order", exact: true }),
+      peer
+        .getByRole("navigation", { name: "Store tasks" })
+        .getByRole("button", { name: "New order", exact: true }),
     ).toBeVisible();
     await expect(
       v.getByRole("heading", { name: "Proof on this device", exact: true }),
