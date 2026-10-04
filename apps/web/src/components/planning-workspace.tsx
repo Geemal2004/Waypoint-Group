@@ -27,7 +27,10 @@ export function PlanningBoard({ day = "2026-01-08" }: { day?: string }) {
     [showAll, setShowAll] = useState(false);
   const { context, plan, validation, selected, busy, edit, run } = m;
   const trip = plan?.trips[active],
-    metric = validation?.trips[active];
+    metric = validation?.trips.find(
+      (m) => m.vehicleId === trip?.vehicleId && m.trip === trip?.trip,
+    );
+  const reasonValid = !!plan?.reason.trim() && plan.reason.length <= 500;
   const queue =
     context?.orders.filter(
       (o) =>
@@ -283,7 +286,9 @@ export function PlanningBoard({ day = "2026-01-08" }: { day?: string }) {
                   (o) => o.id === t.stops[0]?.orderId,
                 ),
                 v = context?.vehicles.find((v) => v.id === t.vehicleId),
-                stats = validation?.trips[i];
+                stats = validation?.trips.find(
+                  (m) => m.vehicleId === t.vehicleId && m.trip === t.trip,
+                );
               const kg = t.stops.reduce(
                   (n, s) =>
                     n +
@@ -703,8 +708,14 @@ export function PlanningBoard({ day = "2026-01-08" }: { day?: string }) {
                       {t.vehicleId} · route {t.trip}
                     </strong>{" "}
                     · depart {time(t.departureAt)} · return{" "}
-                    {time(validation.trips[i].returnAt)} ·{" "}
-                    {validation.trips[i].fuelL.toFixed(2)} L
+                    {(() => {
+                      const stats = validation.trips.find(
+                        (m) => m.vehicleId === t.vehicleId && m.trip === t.trip,
+                      );
+                      return stats
+                        ? `${time(stats.returnAt)} · ${stats.fuelL.toFixed(2)} L`
+                        : "Metrics unavailable";
+                    })()}
                     <ol>
                       {t.stops.map((s) => (
                         <li key={s.orderId}>{m.name(s.orderId)}</li>
@@ -731,11 +742,18 @@ export function PlanningBoard({ day = "2026-01-08" }: { day?: string }) {
               Publication reason
               <input
                 value={plan.reason}
+                maxLength={500}
+                aria-invalid={!reasonValid}
                 onChange={(e) =>
                   edit((p) => ({ ...p, reason: e.target.value }))
                 }
               />
             </label>
+            {!reasonValid && (
+              <p role="alert">
+                Enter a publication reason of 1–500 characters.
+              </p>
+            )}
             <div className="button-row">
               <Button
                 variant="outline"
@@ -762,7 +780,7 @@ export function PlanningBoard({ day = "2026-01-08" }: { day?: string }) {
                 Validate road routes
               </Button>
               <Button
-                disabled={busy || !validation?.valid}
+                disabled={busy || !validation?.valid || !reasonValid}
                 onClick={() =>
                   void run(async () => {
                     await api("/planning/publish", {

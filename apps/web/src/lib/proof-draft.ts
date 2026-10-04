@@ -25,6 +25,9 @@ export function useProofDraft(accountId: string, order: Order) {
   >("loading");
   const [error, setError] = useState("");
   const current = useRef(initial);
+  const latestInitial = useRef(initial);
+  latestInitial.current = initial;
+  const prepared = useRef(false);
   const writes = useRef<Promise<void>>(Promise.resolve());
   const mounted = useRef(false);
   const revision = useRef(0);
@@ -33,12 +36,24 @@ export function useProofDraft(accountId: string, order: Order) {
     void offlineDb.proofDrafts
       .get(initial.key)
       .then((kept) => {
-        if (!mounted.current || activeAccountId() !== accountId) return;
+        if (!mounted.current) return;
+        if (activeAccountId() !== accountId) {
+          setState("error");
+          setError(
+            "Account changed. Reopen this workspace with the same driver. Your local evidence is retained.",
+          );
+          return;
+        }
         if (kept?.accountId === accountId && kept.orderId === order.id) {
+          prepared.current = true;
           current.current = kept;
           setDraft(kept);
           setState("saved");
-        } else setState("ready");
+        } else {
+          current.current = latestInitial.current;
+          setDraft(latestInitial.current);
+          setState("ready");
+        }
       })
       .catch(() => {
         if (mounted.current) {
@@ -52,11 +67,20 @@ export function useProofDraft(accountId: string, order: Order) {
       mounted.current = false;
     };
   }, [accountId, order.id]);
+  useEffect(() => {
+    // Only untouched forms follow polling updates. Prepared evidence keeps its
+    // original version until the driver explicitly reviews or discards it.
+    if (state === "ready" && !prepared.current) {
+      current.current = latestInitial.current;
+      setDraft(latestInitial.current);
+    }
+  }, [order.version, state]);
   function update(
     patch: Partial<
       Pick<ProofDraft, "quantities" | "issue" | "photo" | "photoName">
     >,
   ) {
+    prepared.current = true;
     const next = {
       ...current.current,
       ...patch,
@@ -98,10 +122,31 @@ export function useProofDraft(accountId: string, order: Order) {
     if (activeAccountId() !== accountId)
       throw new Error("Account changed. Reopen this workspace.");
     await offlineDb.proofDrafts.delete(initial.key);
-    current.current = initial;
-    setDraft(initial);
+    prepared.current = false;
+    current.current = latestInitial.current;
+    setDraft(latestInitial.current);
     setState("ready");
     setError("");
+  }
+  function review() {
+    if (activeAccountId() !== accountId)
+      throw new Error("Account changed. Reopen this workspace.");
+    const quantities = current.current.quantities;
+    if (
+      Object.keys(quantities).length !== order.lines.length ||
+      order.lines.some(
+        (line) =>
+          !Number.isInteger(quantities[line.id]) ||
+          quantities[line.id] < 0 ||
+          quantities[line.id] > (line.loaded ?? 0),
+      )
+    )
+      throw new Error(
+        "The retained quantities do not match the current released load. Keep the evidence and ask dispatch to review this stop.",
+      );
+    // The driver explicitly reviewed the displayed load; keep original evidence.
+    current.current = { ...current.current, expectedVersion: order.version };
+    update({});
   }
   return {
     draft,
@@ -109,6 +154,7 @@ export function useProofDraft(accountId: string, order: Order) {
     error,
     update,
     discard,
+    review,
     flush: () => writes.current,
     stale: draft.expectedVersion !== order.version,
   };

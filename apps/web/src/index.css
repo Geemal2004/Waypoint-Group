@@ -149,6 +149,21 @@ textarea {
   min-height: 80px;
   resize: vertical;
 }
+.proof-draft-review label {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 48px;
+  margin-block: 8px;
+}
+.proof-draft-review input[type="checkbox"] {
+  flex: 0 0 18px;
+  width: 18px;
+  height: 18px;
+  min-height: 18px;
+  padding: 0;
+  accent-color: var(--primary);
+}
 .button {
   min-height: 48px;
   padding: 12px 18px;

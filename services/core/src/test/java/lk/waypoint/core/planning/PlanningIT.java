@@ -72,6 +72,17 @@ class PlanningIT {
         assertThat(db.queryForList("select status from orders where id in (?,?)",String.class,first,second)).containsOnly("IN_TRANSIT");
         assertThatThrownBy(()->operations.arrive(account("driver"),second,4)).hasMessageContaining("earlier stops");
     }
+    @Test void publicationRequiresBoundedNonblankReason(){
+        UUID id=order("DEMO-FRESH","AMBIENT","DEMO-RICE",1);
+        var valid=plan(trip("DEMO-DRY",1,"2026-10-04T22:00:00Z",id));
+        for(String reason:Arrays.asList(null,"","   ","x".repeat(501))){
+            var invalid=new Plan(valid.day(),0,valid.trips(),valid.deferred(),reason);
+            assertThat(codes(invalid)).contains("PUBLICATION_REASON");
+            assertThatThrownBy(()->planner.publish(account("dispatcher"),invalid)).hasMessageContaining("PUBLICATION_REASON");
+        }
+        assertThat(db.queryForObject("select count(*) from plan_revisions",Integer.class)).isZero();
+        assertThat(codes(new Plan(valid.day(),0,valid.trips(),valid.deferred(),"x".repeat(500)))).isEmpty();
+    }
     @ParameterizedTest @ValueSource(strings={"WEIGHT_LIMIT","VOLUME_LIMIT","DEPOT_MISMATCH","VAN_ONLY_ACCESS","VEHICLE_UNAVAILABLE","DELIVERY_WINDOW","WEEKLY_FUEL","TRIP_BUDGET"})
     void constraintsRejectInfeasibleManifest(String code){
         UUID id=order("DEMO-FRESH","AMBIENT","DEMO-RICE",10);

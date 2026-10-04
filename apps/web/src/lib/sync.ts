@@ -1,5 +1,5 @@
 import { api, ApiError } from "./api";
-import { offlineDb, type OutboxAction } from "./offline-db";
+import { offlineDb, type OutboxAction, type ProofDraft } from "./offline-db";
 import type { Account, Order } from "./models";
 
 const activeKey = "waypoint-active-account";
@@ -56,6 +56,7 @@ export async function saveProof(
   quantities: Record<string, number>,
   issue: string,
   file: File,
+  retainedDraft?: ProofDraft,
 ) {
   if (activeAccountId() !== account.id)
     throw new Error(
@@ -109,6 +110,23 @@ export async function saveProof(
         throw new Error(
           "Proof for this stop is already saved. Check its sync status below.",
         );
+      if (retainedDraft) {
+        const kept = await offlineDb.proofDrafts.get(retainedDraft.key);
+        if (
+          !kept ||
+          kept.accountId !== account.id ||
+          kept.orderId !== order.id ||
+          kept.updatedAt !== retainedDraft.updatedAt ||
+          kept.expectedVersion !== retainedDraft.expectedVersion ||
+          JSON.stringify(kept.quantities) !==
+            JSON.stringify(retainedDraft.quantities) ||
+          kept.issue !== retainedDraft.issue ||
+          kept.photoName !== retainedDraft.photoName
+        )
+          throw new Error(
+            "The local draft changed. Reopen Sync and review the retained evidence again.",
+          );
+      }
       await offlineDb.outbox.add(action);
       await offlineDb.attachments.add({
         id: actionId,

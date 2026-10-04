@@ -11,7 +11,11 @@ import {
 import { Button } from "./ui/button";
 import { api } from "../lib/api";
 import type { Account, Catalog, Order, Vehicle, Conflict } from "../lib/models";
-import { offlineDb, type OutboxAction } from "../lib/offline-db";
+import {
+  offlineDb,
+  type OutboxAction,
+  type ProofDraft,
+} from "../lib/offline-db";
 import { saveProof, syncProofs } from "../lib/sync";
 import { useProofDraft } from "../lib/proof-draft";
 import { PlanningBoard } from "./planning-workspace";
@@ -718,17 +722,22 @@ export function Driver({
 }) {
   const [selected, setSelected] = useState(""),
     [outbox, setOutbox] = useState<OutboxAction[]>([]),
+    [drafts, setDrafts] = useState<ProofDraft[]>([]),
     [tab, setTab] = useState("journey");
   useEffect(() => {
     let live = true;
     const read = () =>
-      offlineDb.outbox
-        .where("accountId")
-        .equals(account.id)
-        .toArray()
-        .then((v) => {
-          if (live) setOutbox(v);
-        });
+      Promise.all([
+        offlineDb.outbox.where("accountId").equals(account.id).toArray(),
+        offlineDb.proofDrafts.where("accountId").equals(account.id).toArray(),
+      ])
+        .then(([actions, kept]) => {
+          if (live) {
+            setOutbox(actions);
+            setDrafts(kept);
+          }
+        })
+        .catch(() => {});
     void read();
     const timer = setInterval(read, 1500);
     return () => {
@@ -937,6 +946,23 @@ export function Driver({
               <RefreshCw size={16} /> Retry sync
             </Button>
           </div>
+          {drafts.map((draft) => {
+            const currentOrder = orders.find((o) => o.id === draft.orderId);
+            return currentOrder?.status === "DEFERRED" &&
+              draft.expectedVersion !== currentOrder.version &&
+              !outbox.some(
+                (a) =>
+                  a.entityId === draft.orderId && a.syncState !== "rejected",
+              ) ? (
+              <DeferredDraftReview
+                key={draft.key}
+                account={account}
+                order={currentOrder}
+                draft={draft}
+                onSaved={onSaved}
+              />
+            ) : null;
+          })}
           {!outbox.length ? (
             <p>No proof saved on this device yet.</p>
           ) : (
@@ -987,6 +1013,104 @@ export function Driver({
     </>
   );
 }
+function DeferredDraftReview({
+  account,
+  order,
+  draft,
+  onSaved,
+}: {
+  account: Account;
+  order: Order;
+  draft: ProofDraft;
+  onSaved: () => void;
+}) {
+  const [busy, setBusy] = useState(false),
+    [error, setError] = useState(""),
+    [preview, setPreview] = useState("");
+  useEffect(() => {
+    if (!draft.photo) return;
+    const url = URL.createObjectURL(draft.photo);
+    setPreview(url);
+    return () => URL.revokeObjectURL(url);
+  }, [draft.photo]);
+  return (
+    <section
+      aria-label="Retained draft for deferred stop"
+      className="conflict-row"
+    >
+      <h3>{order.source_ref || order.reference} · unsent draft retained</h3>
+      <p>
+        Dispatch deferred this stop. Save the original evidence for dispatcher
+        review; this does not confirm delivery or undo the deferral.
+      </p>
+      <ul>
+        {order.lines.map((line) => (
+          <li key={line.id}>
+            {line.name}:{" "}
+            {draft.quantities[line.id] ?? "Missing retained quantity"} retained
+            · {line.loaded ?? 0} released
+          </li>
+        ))}
+      </ul>
+      <p>
+        Issue: {draft.issue || "None recorded"} · original stop version{" "}
+        {draft.expectedVersion} · current version {order.version}
+      </p>
+      {preview && (
+        <img
+          src={preview}
+          alt="Retained draft evidence preview"
+          className="proof-preview"
+        />
+      )}
+      {!draft.photo && (
+        <p>
+          The draft has no photo. Keep it and ask dispatch to review this stop.
+        </p>
+      )}
+      {error && <p role="alert">{error}</p>}
+      <Button
+        disabled={busy || !draft.photo}
+        onClick={async () => {
+          setBusy(true);
+          setError("");
+          try {
+            if (
+              Object.keys(draft.quantities).length !== order.lines.length ||
+              order.lines.some(
+                (line) => !Number.isInteger(draft.quantities[line.id]),
+              )
+            )
+              throw new Error(
+                "The order lines changed. Evidence is retained; ask dispatch to review before submission.",
+              );
+            // Preserve the captured version so Spring retains a conflict, never a silent rebase.
+            await saveProof(
+              account,
+              { ...order, version: draft.expectedVersion },
+              draft.quantities,
+              draft.issue,
+              new File([draft.photo!], draft.photoName || "proof.png", {
+                type: draft.photo!.type,
+              }),
+              draft,
+            );
+            onSaved();
+            void syncProofs(account.id);
+          } catch (e) {
+            setError((e as Error).message);
+          } finally {
+            setBusy(false);
+          }
+        }}
+      >
+        {busy
+          ? "Saving evidence…"
+          : "Save retained draft for dispatcher review"}
+      </Button>
+    </section>
+  );
+}
 function DeliveryForm({
   account,
   order,
@@ -1002,6 +1126,7 @@ function DeliveryForm({
     file = local.draft.photo;
   const [saving, setSaving] = useState(false),
     [error, setError] = useState("");
+  const [reviewedLoad, setReviewedLoad] = useState(false);
   const [preview, setPreview] = useState("");
   useEffect(() => {
     if (!file) {
@@ -1040,9 +1165,37 @@ function DeliveryForm({
         {local.stale && (
           <p>
             The stop changed since this draft was recorded. Your draft is
-            retained. Review the current load, then discard the draft to start
-            again.
+            retained. Compare the retained quantities below with the current
+            released load. You can keep your photo and issue after reviewing.
           </p>
+        )}
+        {local.stale && (
+          <div className="proof-draft-review">
+            <label>
+              <input
+                type="checkbox"
+                checked={reviewedLoad}
+                onChange={(e) => setReviewedLoad(e.target.checked)}
+              />
+              I reviewed the retained quantities and photo against the current
+              released load
+            </label>
+            <Button
+              variant="outline"
+              disabled={!reviewedLoad || saving || local.state !== "saved"}
+              onClick={() => {
+                try {
+                  local.review();
+                  setReviewedLoad(false);
+                  setError("");
+                } catch (e) {
+                  setError((e as Error).message);
+                }
+              }}
+            >
+              Keep evidence and use reviewed load
+            </Button>
+          </div>
         )}
         {(local.state === "saved" ||
           local.stale ||
@@ -1064,7 +1217,12 @@ function DeliveryForm({
         )}
       </Notice>
       <fieldset
-        disabled={saving || local.state === "loading" || local.stale}
+        disabled={
+          saving ||
+          local.state === "loading" ||
+          local.state === "error" ||
+          local.stale
+        }
         className="proof-draft-fields"
       >
         {order.lines.map((l) => (
@@ -1090,7 +1248,7 @@ function DeliveryForm({
           <label>
             Delivery issue
             <select
-            aria-label="Delivery issue"
+              aria-label="Delivery issue"
               value={issue}
               onChange={(e) => local.update({ issue: e.target.value })}
             >
