@@ -22,6 +22,8 @@ Open **http://localhost:8080**. Flyway applies migrations and creates the four d
 
 These are synthetic judge accounts at Peliyagoda, with server-enforced scopes and BCrypt passwords. Default bindings are local only. The competition deployment is **https://18-138-29-235.sslip.io**; its four usernames are the same, with a private competition password in ignored `data/private/lightsail-credentials.json`. The passwords above apply only to local development.
 
+When `DEMO_SEED=true`, the sign-in page opens with a one-click role picker (Store manager for Waypoint Fresh, Style and Tech; Dispatcher; Loader; Driver) that signs judges into these demo accounts without a password. It is served by `POST /api/v1/auth/demo-login`, which only exists when demo seeding is on and only reaches `DEMO-*` accounts, so production (`DEMO_SEED=false`) shows the plain username and password form.
+
 ## Private challenge reference
 
 The dataset judge walkthrough requires the supplied private files. Competition files, derived order rows, waypoint mappings and generated SQL stay gitignored. From the repository root, with Docker Desktop running:

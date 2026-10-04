@@ -529,6 +529,37 @@ function Retention({ account }: { account: Account }) {
     </footer>
   );
 }
+const DEMO_ROLES: {
+  role: Account["role"];
+  title: string;
+  detail: string;
+  Icon: typeof Store;
+}[] = [
+  {
+    role: "MANAGER",
+    title: "Store manager",
+    detail: "Waypoint Fresh · Waypoint Style · Waypoint Tech",
+    Icon: Store,
+  },
+  {
+    role: "DISPATCHER",
+    title: "Dispatcher",
+    detail: "Orders, planning, live control and fleet",
+    Icon: ClipboardList,
+  },
+  {
+    role: "LOADER",
+    title: "Loader",
+    detail: "Pick, stage and hand over loads",
+    Icon: PackageCheck,
+  },
+  {
+    role: "DRIVER",
+    title: "Driver",
+    detail: "Journey, delivery proof and handoffs",
+    Icon: Truck,
+  },
+];
 function Login({
   error,
   onLogin,
@@ -538,35 +569,76 @@ function Login({
 }) {
   const [username, setUsername] = useState(""),
     [password, setPassword] = useState(""),
-    [busy, setBusy] = useState(false),
-    [message, setMessage] = useState("");
+    [busy, setBusy] = useState(""),
+    [message, setMessage] = useState(""),
+    [demoRoles, setDemoRoles] = useState<Account["role"][]>([]);
+  useEffect(() => {
+    let live = true;
+    if (navigator.onLine)
+      api<Account["role"][]>("/auth/demo-accounts")
+        .then((roles) => live && setDemoRoles(roles))
+        .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, []);
+  async function signIn(key: string, path: string, body: unknown) {
+    setBusy(key);
+    setMessage("");
+    try {
+      await refreshCsrf();
+      await api(path, body);
+      await refreshCsrf();
+      await onLogin(await api<Account>("/auth/me"));
+    } catch (e) {
+      setMessage(e instanceof Error ? e.message : "Sign-in failed.");
+    } finally {
+      setBusy("");
+    }
+  }
+  const roleCards = DEMO_ROLES.filter((r) => demoRoles.includes(r.role));
   return (
     <main className="login-page">
-      <div className="login-card">
+      <div className={"login-card" + (roleCards.length ? " with-roles" : "")}>
         <div className="wordmark">
           WAYPOINT <span>GROUP</span>
         </div>
         <p className="eyebrow">Connected delivery operations</p>
         <h1>Every delivery begins with a promise.</h1>
-        <p>Sign in to your assigned role and depot.</p>
+        {roleCards.length > 0 && (
+          <section aria-labelledby="role-picker-title">
+            <p id="role-picker-title">
+              Choose a role to explore the judge environment.
+            </p>
+            <div className="role-picker">
+              {roleCards.map(({ role, title, detail, Icon }) => (
+                <button
+                  key={role}
+                  type="button"
+                  className="role-option"
+                  disabled={!!busy || !navigator.onLine}
+                  onClick={() =>
+                    void signIn(role, "/auth/demo-login", { role })
+                  }
+                >
+                  <Icon size={22} />
+                  <strong>{busy === role ? "Opening…" : title}</strong>
+                  <small>{detail}</small>
+                </button>
+              ))}
+            </div>
+            <p className="role-picker-divider">or sign in with an account</p>
+          </section>
+        )}
+        {!roleCards.length && <p>Sign in to your assigned role and depot.</p>}
         <form
-          onSubmit={async (e) => {
+          onSubmit={(e) => {
             e.preventDefault();
-            setBusy(true);
-            setMessage("");
-            try {
-              await refreshCsrf();
-              await api(
-                "/auth/login",
-                new URLSearchParams({ username, password }),
-              );
-              await refreshCsrf();
-              await onLogin(await api<Account>("/auth/me"));
-            } catch (e) {
-              setMessage(e instanceof Error ? e.message : "Sign-in failed.");
-            } finally {
-              setBusy(false);
-            }
+            void signIn(
+              "form",
+              "/auth/login",
+              new URLSearchParams({ username, password }),
+            );
           }}
         >
           <label>
@@ -593,25 +665,27 @@ function Login({
               {message || error}
             </p>
           )}
-          <Button disabled={busy || !navigator.onLine} type="submit">
-            {busy ? "Signing in…" : "Sign in"}
+          <Button disabled={!!busy || !navigator.onLine} type="submit">
+            {busy === "form" ? "Signing in…" : "Sign in"}
           </Button>
         </form>
-        <details>
-          <summary>Judge demo accounts</summary>
-          <p>manager · dispatcher · loader · driver</p>
-          {import.meta.env.VITE_SHOW_DEMO_PASSWORD !== "false" ? (
-            <p>
-              Password: <code>WaypointDemo!2026</code>
-            </p>
-          ) : (
-            <p>Use the competition password supplied by the team.</p>
-          )}
-          <small>
-            Synthetic walkthrough only. Each account has a server-assigned role
-            and scope.
-          </small>
-        </details>
+        {!roleCards.length && (
+          <details>
+            <summary>Judge demo accounts</summary>
+            <p>manager · dispatcher · loader · driver</p>
+            {import.meta.env.VITE_SHOW_DEMO_PASSWORD !== "false" ? (
+              <p>
+                Password: <code>WaypointDemo!2026</code>
+              </p>
+            ) : (
+              <p>Use the competition password supplied by the team.</p>
+            )}
+            <small>
+              Synthetic walkthrough only. Each account has a server-assigned
+              role and scope.
+            </small>
+          </details>
+        )}
       </div>
     </main>
   );
