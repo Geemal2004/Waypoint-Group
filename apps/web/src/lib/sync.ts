@@ -57,6 +57,10 @@ export async function saveProof(
   issue: string,
   file: File,
 ) {
+  if (activeAccountId() !== account.id)
+    throw new Error(
+      "Account changed. Reopen this workspace before saving proof.",
+    );
   if (
     !["image/jpeg", "image/png"].includes(file.type) ||
     file.size > 5 * 1024 * 1024
@@ -91,6 +95,7 @@ export async function saveProof(
     "rw",
     offlineDb.outbox,
     offlineDb.attachments,
+    offlineDb.proofDrafts,
     async () => {
       const pending = await offlineDb.outbox
         .where("accountId")
@@ -111,6 +116,11 @@ export async function saveProof(
         accountId: account.id,
         blob: file,
       });
+      // Move the draft to the immutable outbox in the same local transaction.
+      await offlineDb.proofDrafts
+        .where("[accountId+orderId]")
+        .equals([account.id, order.id])
+        .delete();
     },
   );
   return actionId;

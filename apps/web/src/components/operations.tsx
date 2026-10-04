@@ -13,6 +13,7 @@ import { api } from "../lib/api";
 import type { Account, Catalog, Order, Vehicle, Conflict } from "../lib/models";
 import { offlineDb, type OutboxAction } from "../lib/offline-db";
 import { saveProof, syncProofs } from "../lib/sync";
+import { useProofDraft } from "../lib/proof-draft";
 import { PlanningBoard } from "./planning-workspace";
 import {
   NetworkScreen,
@@ -995,12 +996,11 @@ function DeliveryForm({
   order: Order;
   onSaved: () => void;
 }) {
-  const [counts, setCounts] = useState(
-      Object.fromEntries(order.lines.map((l) => [l.id, l.loaded || 0])),
-    ),
-    [issue, setIssue] = useState(""),
-    [file, setFile] = useState<File>(),
-    [saving, setSaving] = useState(false),
+  const local = useProofDraft(account.id, order);
+  const counts = local.draft.quantities,
+    issue = local.draft.issue,
+    file = local.draft.photo;
+  const [saving, setSaving] = useState(false),
     [error, setError] = useState("");
   const [preview, setPreview] = useState("");
   useEffect(() => {
@@ -1024,70 +1024,149 @@ function DeliveryForm({
           ? "Proof is saved on this device before upload."
           : "Connection unavailable. Save proof now; sync retries when connectivity returns."}
       </Notice>
-      {order.lines.map((l) => (
-        <Panel className="product-row" key={l.id}>
-          <div className="product-copy">
-            <h3>{l.name}</h3>
-            <p>
-              {l.loaded} released · {l.ordered - (l.loaded || 0)} known not
-              loaded
-            </p>
-          </div>
-          <Counter
-            label={"Delivered " + l.name}
-            value={counts[l.id]}
-            max={l.loaded || 0}
-            onChange={(v) => setCounts({ ...counts, [l.id]: v })}
-          />
-        </Panel>
-      ))}
-      <Panel>
-        <label>
-          Delivery issue
-          <select value={issue} onChange={(e) => setIssue(e.target.value)}>
-            <option value="">No new discrepancy</option>
-            <option>Short at delivery</option>
-            <option>Damaged product</option>
-            <option>Damaged packaging</option>
-          </select>
-        </label>
-        <label className="photo-label">
-          <Camera size={22} /> Delivery photo · JPEG or PNG, up to 5 MB
-          <input
-            aria-label="Delivery photo"
-            type="file"
-            accept="image/jpeg,image/png"
-            capture="environment"
-            onChange={(e) => setFile(e.target.files?.[0])}
-          />
-        </label>
-        {file && (
-          <>
-            <img
-              className="proof-preview"
-              src={preview}
-              alt="Selected delivery evidence preview"
-            />
-            <p>
-              {file.name} · {(file.size / 1024).toFixed(0)} KB selected
-            </p>
-          </>
+      <Notice
+        tone={local.state === "error" || local.stale ? "warning" : "info"}
+      >
+        <span role="status">
+          {local.state === "loading"
+            ? "Opening your local proof draft…"
+            : local.state === "saving"
+              ? "Saving draft on this device…"
+              : local.state === "saved"
+                ? "Draft saved on this device · not submitted"
+                : "Quantity, issue and photo changes are saved as a local draft."}
+        </span>
+        {local.error && <p role="alert">{local.error}</p>}
+        {local.stale && (
+          <p>
+            The stop changed since this draft was recorded. Your draft is
+            retained. Review the current load, then discard the draft to start
+            again.
+          </p>
         )}
-        <small>
-          Photo and physical quantities are retained together. Store receipt is
-          a separate confirmation.
-        </small>
-      </Panel>
+        {(local.state === "saved" ||
+          local.stale ||
+          local.state === "error") && (
+          <Button
+            variant="outline"
+            disabled={saving || local.state === "saving"}
+            onClick={async () => {
+              try {
+                await local.discard();
+                setError("");
+              } catch (e) {
+                setError((e as Error).message);
+              }
+            }}
+          >
+            Discard local draft
+          </Button>
+        )}
+      </Notice>
+      <fieldset
+        disabled={saving || local.state === "loading" || local.stale}
+        className="proof-draft-fields"
+      >
+        {order.lines.map((l) => (
+          <Panel className="product-row" key={l.id}>
+            <div className="product-copy">
+              <h3>{l.name}</h3>
+              <p>
+                {l.loaded} released · {l.ordered - (l.loaded || 0)} known not
+                loaded
+              </p>
+            </div>
+            <Counter
+              label={"Delivered " + l.name}
+              value={counts[l.id]}
+              max={l.loaded || 0}
+              onChange={(v) =>
+                local.update({ quantities: { ...counts, [l.id]: v } })
+              }
+            />
+          </Panel>
+        ))}
+        <Panel>
+          <label>
+            Delivery issue
+            <select
+              value={issue}
+              onChange={(e) => local.update({ issue: e.target.value })}
+            >
+              <option value="">No new discrepancy</option>
+              <option>Short at delivery</option>
+              <option>Damaged product</option>
+              <option>Damaged packaging</option>
+            </select>
+          </label>
+          <label className="photo-label">
+            <Camera size={22} /> Delivery photo · JPEG or PNG, up to 5 MB
+            <input
+              aria-label="Delivery photo"
+              type="file"
+              accept="image/jpeg,image/png"
+              capture="environment"
+              onChange={(e) => {
+                const selected = e.target.files?.[0];
+                if (!selected) return;
+                if (
+                  !["image/jpeg", "image/png"].includes(selected.type) ||
+                  selected.size > 5 * 1024 * 1024 ||
+                  !selected.size
+                ) {
+                  setError("Choose a JPEG or PNG photo up to 5 MB.");
+                  e.target.value = "";
+                  return;
+                }
+                setError("");
+                local.update({ photo: selected, photoName: selected.name });
+              }}
+            />
+          </label>
+          {file && (
+            <>
+              <img
+                className="proof-preview"
+                src={preview}
+                alt="Selected delivery evidence preview"
+              />
+              <p>
+                {local.draft.photoName} · {(file.size / 1024).toFixed(0)} KB
+                selected
+              </p>
+            </>
+          )}
+          <small>
+            Photo and physical quantities are retained together. Store receipt
+            is a separate confirmation.
+          </small>
+        </Panel>
+      </fieldset>
       {error && <Notice tone="critical">{error}</Notice>}
       <div className="sticky-action">
         <small>Saved locally before any confirmation</small>
         <Button
-          disabled={saving || !file || (short && !issue)}
+          disabled={
+            saving ||
+            local.state !== "saved" ||
+            local.stale ||
+            !file ||
+            (short && !issue)
+          }
           onClick={async () => {
             setSaving(true);
             setError("");
             try {
-              await saveProof(account, order, counts, issue, file!);
+              await local.flush();
+              await saveProof(
+                account,
+                order,
+                counts,
+                issue,
+                new File([file!], local.draft.photoName || "proof.png", {
+                  type: file!.type,
+                }),
+              );
               onSaved();
               void syncProofs(account.id);
             } catch (e) {

@@ -682,6 +682,50 @@ export function PlanningBoard({ day = "2026-01-08" }: { day?: string }) {
               </div>
             ))}
           </section>
+          {validation?.valid && (
+            <section className="panel" aria-label="Publication review">
+              <h3>Before publication</h3>
+              <p>
+                {plan.trips.length} trips ·{" "}
+                {plan.trips.reduce((n, t) => n + t.stops.length, 0)} assigned
+                orders · {plan.deferred.length} deferred orders · new plan
+                version {plan.expectedPlanVersion + 1}
+              </p>
+              <p>
+                The loader, driver and authorized stores will see this version
+                and its stop order. Loading follows reverse delivery order.
+                Delivery proof and store receipt remain separate.
+              </p>
+              <ul>
+                {plan.trips.map((t, i) => (
+                  <li key={i}>
+                    <strong>
+                      {t.vehicleId} · route {t.trip}
+                    </strong>{" "}
+                    · depart {time(t.departureAt)} · return{" "}
+                    {time(validation.trips[i].returnAt)} ·{" "}
+                    {validation.trips[i].fuelL.toFixed(2)} L
+                    <ol>
+                      {t.stops.map((s) => (
+                        <li key={s.orderId}>{m.name(s.orderId)}</li>
+                      ))}
+                    </ol>
+                  </li>
+                ))}
+              </ul>
+              {!!plan.deferred.length && (
+                <p>
+                  Deferred orders keep their recorded reasons and skip history.
+                  Their requested next days do not reserve a feasible trip;
+                  review them for allocation on that day.
+                </p>
+              )}
+              <small>
+                Spring checks the current versions and every constraint again
+                when you publish. Any edit requires validation again.
+              </small>
+            </section>
+          )}
           <div className="planning-action-bar">
             <label>
               Publication reason
