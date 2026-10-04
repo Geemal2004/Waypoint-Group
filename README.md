@@ -2,7 +2,7 @@
 
 **Retail distribution operations, from order planning to confirmed store receipt.**
 
-[![Checks](https://github.com/Geemal2004/Waypoint-Group/actions/workflows/ci.yml/badge.svg)](https://github.com/Geemal2004/Waypoint-Group/actions/workflows/ci.yml)
+[![Checks](https://github.com/Geemal2004/geemalmuthugala-Waypoint/actions/workflows/ci.yml/badge.svg)](https://github.com/Geemal2004/geemalmuthugala-Waypoint/actions/workflows/ci.yml)
 ![React 19](https://img.shields.io/badge/React-19-149eca)
 ![Java 21](https://img.shields.io/badge/Java-21-ed8b00)
 ![Python 3.12](https://img.shields.io/badge/Python-3.12-3776ab)
@@ -192,7 +192,7 @@ python -m pytest
 
 With the stack running, execute `node tools/online-walkthrough.mjs` from the repository root for authenticated API handoffs and replay recovery. Dataset and location walkthroughs require their documented fixtures.
 
-[GitHub Actions](https://github.com/Geemal2004/Waypoint-Group/actions) checks frontend builds, Java tests, Python tests, API handoffs, and browser scenarios. See [CI/CD](docs/ci-cd.md) and [verification evidence](docs/verification.md) for scope and recorded results.
+[GitHub Actions](https://github.com/Geemal2004/geemalmuthugala-Waypoint/actions) checks frontend builds, Java tests, Python tests, API handoffs, and browser scenarios. See [CI/CD](docs/ci-cd.md) and [verification evidence](docs/verification.md) for scope and recorded results.
 
 ## Deployment
 
