@@ -1090,6 +1090,7 @@ function DeliveryForm({
           <label>
             Delivery issue
             <select
+            aria-label="Delivery issue"
               value={issue}
               onChange={(e) => local.update({ issue: e.target.value })}
             >
