@@ -1,5 +1,7 @@
 # Verification
 
+Development-branch checks on 4 October 2026: [CI run 37172957233](https://github.com/Geemal2004/Waypoint-Group/actions/runs/37172957233) passed TypeScript/Vite, 53 Java unit/integration tests, 12 Python tests, the authenticated API walkthrough and four browser cases. Two cases requiring private source inputs explicitly skipped on the public runner. Browser checks include unsent proof draft photo/quantity/issue restoration after offline reload, stale-draft blocking/discard, atomic transfer into the existing outbox, same-stop conflict recovery, v2-to-v3 storage upgrade retaining earlier evidence, publication review invalidation on edit, protected receipt and account isolation. An initial ambiguous delivery-issue accessible label was corrected before the passing run. Evidence: `tmp/proof-drafts-ci.log`. These branch changes are not yet deployed, and private multi-stop/physical-device acceptance is separate.
+
 Cloud competition checks on 4 October 2026:
 
 - Public **https://18-138-29-235.sslip.io** serves a trusted certificate; secure HttpOnly SameSite session cookies, no-store API and unauthenticated rejection pass (`tmp/lightsail-http-security.log`). Only HTTP/HTTPS edge ports are published.

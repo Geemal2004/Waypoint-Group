@@ -3,7 +3,7 @@
 ```mermaid
 flowchart TD
   UI[React role interfaces / TanStack Query] -->|Session cookies and CSRF| Core[Spring operational authority]
-  UI --> Local[Dexie account cache / outbox / photo]
+  UI --> Local[Dexie account cache / proof drafts / outbox / photo]
   Local -->|Immutable action IDs / retry executor| Core
   SW[Workbox application assets only] --> UI
   Core --> Identity[Identity / role and scope]

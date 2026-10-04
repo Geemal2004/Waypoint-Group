@@ -4,7 +4,7 @@ Spring remains authoritative for operational state and allocation validation. Py
 
 | Improvement | Current work / next step |
 | --- | --- |
-| Durable proof preparation | Account/stop-scoped quantity, issue and photo drafts survive reloads before submission. IndexedDB v3 adds a separate table while retaining earlier outbox evidence. Changed stop versions block draft submission. Final save atomically creates the immutable action/photo and removes the draft. Browser acceptance is in progress. |
+| Durable proof preparation | Account/stop-scoped quantity, issue and photo drafts survive reloads before submission. IndexedDB v3 adds a separate table while retaining earlier outbox evidence. Changed stop versions block draft submission. Final save atomically creates the immutable action/photo and removes the draft. Public browser acceptance passed. |
 | Publication review | After Spring validation, show every vehicle/trip, departure/return, fuel, ordered stops, deferred count, next version and receiving roles. Edits invalidate validation; Spring rechecks publication. |
 | Plan change consequences | Next: show before/after arrival, stop/loading position and window margin for untouched-manifest revisions, plus bounded draft undo/redo. Calculate later-trip effects in Spring and preserve loading locks. |
 | Deferral clarity | Next: separate the constraint, dispatcher's choice, recovery action and what the outlet sees. Keep actual skip history. Do not promise a next trip without validation. |
